@@ -295,10 +295,12 @@ select option { background: var(--panel); }
 <div id="tab-new">
 
   <div class="key-bar">
-    <label>AssemblyAI Key</label>
-    <input type="password" id="keyInput" placeholder="Paste your AssemblyAI key…" oninput="onKeyInput()" />
+    <label>Access Code</label>
+    <input type="password" id="keyInput" placeholder="Optional — only if your Worker has one set…" oninput="onKeyInput()" />
     <span class="key-pill" id="keyPill">Not set</span>
   </div>
+
+  <div id="proxyWarn" class="status-bar s-warn hidden">⚠ No Worker URL set yet. Open <strong>Settings</strong> and paste your Cloudflare Worker URL before processing a meeting.</div>
 
   <div class="card">
     <div class="card-title">Meeting Details</div>
@@ -489,12 +491,16 @@ select option { background: var(--panel); }
 <!-- ══════════ TAB: SETTINGS ══════════ -->
 <div id="tab-settings" class="hidden">
   <div class="card">
-    <div class="card-title">AssemblyAI API Key</div>
+    <div class="card-title">Connection</div>
     <div class="field">
-      <label class="lbl">API Key</label>
-      <input type="password" id="settingsKey" placeholder="Paste your AssemblyAI key…" oninput="onSettingsKey()" />
+      <label class="lbl">Worker / Proxy URL</label>
+      <input type="text" id="sProxy" placeholder="https://thistle-rock-proxy.YOURNAME.workers.dev" oninput="onProxyInput()" />
     </div>
-    <div class="small">Get your free key at <strong style="color:var(--thistle2)">app.assemblyai.com</strong> → API Keys · $50 free credit included.</div>
+    <div class="field">
+      <label class="lbl">Access Code (optional)</label>
+      <input type="password" id="settingsKey" placeholder="Only if you set ACCESS_TOKEN on the Worker" oninput="onSettingsKey()" />
+    </div>
+    <div class="small">Your AssemblyAI key now lives <strong style="color:var(--rock2)">on the Cloudflare Worker</strong>, not in this page. Paste your Worker URL above once and it's remembered on this device.</div>
   </div>
   <div class="card">
     <div class="card-title">Company Profile</div>
@@ -521,13 +527,15 @@ select option { background: var(--panel); }
 </main>
 
 <script>
-const STORE='tr2_meetings', SKEY='tr2_settings', KKEY='tr2_aai_key';
+const STORE='tr2_meetings', SKEY='tr2_settings', KKEY='tr2_access', PKEY='tr2_proxy';
 let currentMeeting=null, selectedFile=null, attendees=['GMac','Carlin'];
 
 function boot() {
   document.getElementById('mDate').value = today();
-  const key = ls(KKEY);
-  if (key) { document.getElementById('keyInput').value=key; document.getElementById('settingsKey').value=key; setKeyPill(true); }
+  const acc = ls(KKEY);
+  if (acc) { document.getElementById('keyInput').value=acc; document.getElementById('settingsKey').value=acc; setKeyPill(true); }
+  const proxy = ls(PKEY);
+  if (proxy) document.getElementById('sProxy').value = proxy;
   const s = lsj(SKEY)||{};
   if (s.company)   document.getElementById('sCompany').value  = s.company;
   if (s.partners)  document.getElementById('sPartners').value = s.partners;
@@ -537,6 +545,7 @@ function boot() {
   if (s.spkC)      document.getElementById('spkC').value      = s.spkC;
   if (s.attendees) attendees = s.attendees;
   renderChips();
+  refreshProxyWarn();
   const dz = document.getElementById('dropZone');
   dz.addEventListener('dragover',  e=>{e.preventDefault();dz.classList.add('over');});
   dz.addEventListener('dragleave', ()=>dz.classList.remove('over'));
@@ -548,12 +557,18 @@ function showTab(t) {
   document.querySelectorAll('nav button').forEach((b,i)=>b.classList.toggle('active',['new','log','actions','settings'][i]===t));
   if(t==='log') renderLog();
   if(t==='actions') renderGlobalActions();
+  if(t==='new') refreshProxyWarn();
 }
 
-function onKeyInput()    { const v=document.getElementById('keyInput').value.trim();    lss(KKEY,v); document.getElementById('settingsKey').value=v; setKeyPill(v.length>10); }
-function onSettingsKey() { const v=document.getElementById('settingsKey').value.trim(); lss(KKEY,v); document.getElementById('keyInput').value=v;    setKeyPill(v.length>10); }
-function setKeyPill(ok)  { const el=document.getElementById('keyPill'); el.textContent=ok?'✓ Key saved':'Not set'; el.className='key-pill '+(ok?'key-set':'key-unset'); }
-function getKey()        { return ls(KKEY)||''; }
+// ── CONNECTION (proxy + optional access code) ──
+function onKeyInput()    { const v=document.getElementById('keyInput').value.trim();    lss(KKEY,v); document.getElementById('settingsKey').value=v; setKeyPill(v.length>0); }
+function onSettingsKey() { const v=document.getElementById('settingsKey').value.trim(); lss(KKEY,v); document.getElementById('keyInput').value=v;    setKeyPill(v.length>0); }
+function onProxyInput()  { lss(PKEY, document.getElementById('sProxy').value.trim()); refreshProxyWarn(); }
+function setKeyPill(ok)  { const el=document.getElementById('keyPill'); el.textContent=ok?'✓ Code saved':'Not set'; el.className='key-pill '+(ok?'key-set':'key-unset'); }
+function getAccess()     { return ls(KKEY)||''; }
+function getProxy()      { return (ls(PKEY)||'').replace(/\/+$/,''); }
+function pHeaders(asJson){ const h={}; if(asJson) h['content-type']='application/json'; const a=getAccess(); if(a) h['x-access-token']=a; return h; }
+function refreshProxyWarn(){ const w=document.getElementById('proxyWarn'); if(w) w.classList.toggle('hidden', !!getProxy()); }
 
 function renderChips() {
   document.getElementById('attendeeChips').innerHTML = attendees.map((a,i)=>{
@@ -566,7 +581,7 @@ function removeAttendee(i) { attendees.splice(i,1); renderChips(); saveSettings(
 
 // ── NATIVE RECORD (iOS-friendly) ──
 function triggerNativeRecord() {
-  if (!getKey()) { showStatus('⚠ Paste your AssemblyAI key first.','warn'); return; }
+  if (!getProxy()) { showStatus('⚠ Set your Worker URL in Settings first.','warn'); return; }
   document.getElementById('nativeAudioInput').click();
 }
 function onNativeAudio(e) {
@@ -609,8 +624,8 @@ function setProgress(p) { document.getElementById('progWrap').classList.remove('
 function showStatus(html,type='info') { const el=document.getElementById('statusEl'); el.className='status-bar s-'+type; el.innerHTML=html; el.classList.remove('hidden'); }
 
 async function runPipeline() {
-  const key=getKey();
-  if(!key){ showStatus('⚠ Paste your AssemblyAI key first.','warn'); return; }
+  const proxy=getProxy();
+  if(!proxy){ showStatus('⚠ Set your Worker URL in Settings first.','warn'); return; }
   if(!selectedFile){ showStatus('⚠ No audio file selected.','warn'); return; }
 
   document.getElementById('processBtn').disabled=true;
@@ -618,20 +633,20 @@ async function runPipeline() {
   document.getElementById('resultsWrap').classList.add('hidden');
 
   setStep('upload'); setProgress(8);
-  showStatus('<div class="spin"></div>&nbsp; Uploading to AssemblyAI…','info');
+  showStatus('<div class="spin"></div>&nbsp; Uploading…','info');
   let uploadUrl;
-  try { uploadUrl=await aaiUpload(selectedFile,key); }
+  try { uploadUrl=await aaiUpload(selectedFile); }
   catch(e){ showStatus('✗ Upload failed: '+e.message,'error'); resetBtns(); return; }
 
   setStep('transcribe'); setProgress(18);
   showStatus('<div class="spin"></div>&nbsp; Transcribing with speaker detection…','info');
   let jobId;
-  try { jobId=await aaiSubmit(uploadUrl,key); }
+  try { jobId=await aaiSubmit(uploadUrl); }
   catch(e){ showStatus('✗ Submit failed: '+e.message,'error'); resetBtns(); return; }
 
   showStatus('<div class="spin"></div>&nbsp; Processing… (~1–3 min for a typical meeting)','info');
   let result;
-  try { result=await aaiPoll(jobId,key,p=>setProgress(18+p*52)); }
+  try { result=await aaiPoll(jobId,p=>setProgress(18+p*52)); }
   catch(e){ showStatus('✗ '+e.message,'error'); resetBtns(); return; }
 
   setStep('speakers'); setProgress(72);
@@ -643,9 +658,9 @@ async function runPipeline() {
   setStep('analyse'); setProgress(82);
   showStatus('<div class="spin"></div>&nbsp; Analysing meeting…','info');
   const rawTranscript=utterances.map(u=>`[${u.speakerName}]: ${u.text}`).join('\n');
-  let analysis;
-  try   { analysis=await aaiLemur(rawTranscript,key,s); }
-  catch { analysis=fallbackAnalysis(); }
+  let analysis, analysisErr=null;
+  try   { analysis=await analyze(rawTranscript,s); }
+  catch(e){ analysis=fallbackAnalysis(); analysisErr=e.message; }
 
   setStep('done'); setProgress(100);
 
@@ -663,7 +678,8 @@ async function runPipeline() {
 
   renderResults(currentMeeting);
   document.getElementById('resultsWrap').classList.remove('hidden');
-  showStatus('✓ Meeting processed — review below, then save.','success');
+  if(analysisErr) showStatus('⚠ Transcript ready, but AI analysis failed: '+analysisErr+' — you can still save the transcript.','warn');
+  else            showStatus('✓ Meeting processed — review below, then save.','success');
   resetBtns();
   setTimeout(()=>document.getElementById('resultsWrap').scrollIntoView({behavior:'smooth',block:'start'}),200);
 }
@@ -676,14 +692,15 @@ function resetBtns() {
 async function runPipelineFromPaste() {
   const paste=document.getElementById('pasteArea').value.trim();
   if(!paste){ showStatus('⚠ Paste a transcript first.','warn'); return; }
+  if(!getProxy()){ showStatus('⚠ Set your Worker URL in Settings first.','warn'); return; }
   setStep('transcribe'); setProgress(30);
-  const key=getKey(), s=lsj(SKEY)||{};
+  const s=lsj(SKEY)||{};
   const utterances=[{speaker:'A',speakerName:s.spkA||'GMac',text:paste,start:0}];
   setStep('analyse'); setProgress(70);
   showStatus('<div class="spin"></div>&nbsp; Analysing…','info');
-  let analysis;
-  try   { analysis=await aaiLemur(paste,key,s); }
-  catch { analysis=fallbackAnalysis(); }
+  let analysis, analysisErr=null;
+  try   { analysis=await analyze(paste,s); }
+  catch(e){ analysis=fallbackAnalysis(); analysisErr=e.message; }
   setStep('done'); setProgress(100);
   currentMeeting={
     id:Date.now().toString(), date:document.getElementById('mDate').value,
@@ -697,27 +714,28 @@ async function runPipelineFromPaste() {
   };
   renderResults(currentMeeting);
   document.getElementById('resultsWrap').classList.remove('hidden');
-  showStatus('✓ Analysis complete.','success');
+  if(analysisErr) showStatus('⚠ Analysis failed: '+analysisErr,'warn');
+  else            showStatus('✓ Analysis complete.','success');
   setTimeout(()=>document.getElementById('resultsWrap').scrollIntoView({behavior:'smooth',block:'start'}),200);
 }
 
-// ── ASSEMBLYAI ──
-async function aaiUpload(file,key) {
+// ── API CALLS (all routed through the Cloudflare Worker) ──
+async function aaiUpload(file) {
   const buf=await file.arrayBuffer();
-  const r=await fetch('https://api.assemblyai.com/v2/upload',{method:'POST',headers:{authorization:key,'content-type':'application/octet-stream'},body:buf});
-  if(!r.ok) throw new Error('Upload HTTP '+r.status);
+  const r=await fetch(getProxy()+'/upload',{method:'POST',headers:{...pHeaders(false),'content-type':'application/octet-stream'},body:buf});
+  if(!r.ok) throw new Error('HTTP '+r.status+' '+(await r.text().catch(()=>'')));
   return (await r.json()).upload_url;
 }
-async function aaiSubmit(url,key) {
-  const r=await fetch('https://api.assemblyai.com/v2/transcript',{method:'POST',headers:{authorization:key,'content-type':'application/json'},body:JSON.stringify({audio_url:url,speaker_labels:true,speakers_expected:Math.max(attendees.length,2),summarization:true,summary_model:'informative',summary_type:'bullets',auto_highlights:true,sentiment_analysis:true})});
-  if(!r.ok) throw new Error('Submit HTTP '+r.status);
+async function aaiSubmit(url) {
+  const r=await fetch(getProxy()+'/transcript',{method:'POST',headers:pHeaders(true),body:JSON.stringify({audio_url:url,speaker_labels:true,speakers_expected:Math.max(attendees.length,2)})});
+  if(!r.ok) throw new Error('HTTP '+r.status);
   const d=await r.json(); if(d.error) throw new Error(d.error); return d.id;
 }
-async function aaiPoll(id,key,onProg) {
+async function aaiPoll(id,onProg) {
   const start=Date.now();
   while(Date.now()-start<600000){
     await sleep(4000);
-    const r=await fetch(`https://api.assemblyai.com/v2/transcript/${id}`,{headers:{authorization:key}});
+    const r=await fetch(getProxy()+'/transcript/'+id,{headers:pHeaders(false)});
     const d=await r.json();
     if(d.status==='completed'){onProg&&onProg(1);return d;}
     if(d.status==='error') throw new Error(d.error||'Transcription failed');
@@ -725,16 +743,19 @@ async function aaiPoll(id,key,onProg) {
   }
   throw new Error('Timed out — try a shorter recording');
 }
-async function aaiLemur(transcript,key,s) {
+async function analyze(transcript,s) {
   const company=(s&&s.company)||'Thistle Rock Properties Ltd.';
   const context=(s&&s.context)||'Property management and development.';
   const prompt=`You are analysing a partner meeting for ${company}. Context: ${context}\n\nTRANSCRIPT:\n${transcript}\n\nReturn ONLY a valid JSON object — no markdown:\n{"summary":"3-4 sentence executive summary","decisions":["Decision 1"],"actions":[{"task":"description","owner":"name or Both","due":"timeframe"}],"properties":["property names"],"quotes":[{"speaker":"name","quote":"verbatim max 20 words","context":"why notable"}]}`;
-  const r=await fetch('https://api.assemblyai.com/lemur/v3/apply-task',{method:'POST',headers:{authorization:key,'content-type':'application/json'},body:JSON.stringify({input_text:transcript,task:prompt,final_model:'anthropic/claude-3-5-sonnet',max_output_size:2000})});
-  if(!r.ok) throw new Error('LeMUR HTTP '+r.status);
-  const d=await r.json(); if(d.error) throw new Error(d.error);
-  return JSON.parse((d.response||'').replace(/```json|```/g,'').trim());
+  const r=await fetch(getProxy()+'/analyze',{method:'POST',headers:pHeaders(true),body:JSON.stringify({prompt})});
+  if(!r.ok) throw new Error('HTTP '+r.status+' '+(await r.text().catch(()=>'')));
+  const d=await r.json();
+  if(d.error) throw new Error(typeof d.error==='string'?d.error:JSON.stringify(d.error));
+  const content=(d.choices&&d.choices[0]&&d.choices[0].message&&d.choices[0].message.content)||'';
+  if(!content) throw new Error('Empty analysis response');
+  return JSON.parse(content.replace(/```json|```/g,'').trim());
 }
-function fallbackAnalysis(){ return {summary:'Transcript captured. Add your AssemblyAI key to enable AI analysis.',decisions:[],actions:[],properties:[],quotes:[]}; }
+function fallbackAnalysis(){ return {summary:'Transcript captured, but AI analysis did not run (see the status message above).',decisions:[],actions:[],properties:[],quotes:[]}; }
 
 function buildSpeakerMap(utterances,s){
   const map={},counts={};
@@ -818,7 +839,7 @@ function resetAll(){
   resetBtns();
   STEPS.forEach(s=>document.getElementById('ps-'+s).className='pipe-step');
 }
-function nukeData(){ if(confirm('Delete ALL meetings, settings, and API key?')){ [STORE,SKEY,KKEY].forEach(k=>localStorage.removeItem(k));location.reload(); } }
+function nukeData(){ if(confirm('Delete ALL meetings, settings, and saved connection?')){ [STORE,SKEY,KKEY,PKEY].forEach(k=>localStorage.removeItem(k));location.reload(); } }
 
 function today(){ return new Date().toISOString().split('T')[0]; }
 function fmtDate(d){ if(!d)return'';return new Date(d+'T12:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}); }
