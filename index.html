@@ -399,10 +399,13 @@ select option{ background:var(--panel-2); }
   </div>
   <div class="card">
     <div class="card-title">Data</div>
+    <div class="small" style="margin-bottom:12px;">Export regularly as a backup. Import restores a saved JSON, or brings meetings onto another device.</div>
     <div class="flex gap-12 fw">
       <button class="btn btn-ghost btn-sm" onclick="exportAll()">⬇ Export All Meetings</button>
+      <button class="btn btn-ghost btn-sm" onclick="document.getElementById('importInput').click()">⬆ Import Meetings</button>
       <button class="btn btn-danger btn-sm" onclick="nukeData()">🗑 Clear Everything</button>
     </div>
+    <input type="file" id="importInput" accept=".json,application/json" style="display:none" onchange="importMeetings(event)" />
   </div>
 </div>
 
@@ -704,6 +707,23 @@ function doneGlobal(mId,task){ const all=getMeetings(),m=all.find(x=>x.id===mId)
 function exportCurrent(){ if(!currentMeeting)return; dlJson([currentMeeting],`TR_Meeting_${currentMeeting.date}.json`); }
 function exportAll(){ const all=getMeetings();if(!all.length){alert('No meetings yet.');return;}dlJson(all,`TR_Meetings_${today()}.json`); }
 function dlJson(d,n){ const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(d,null,2)],{type:'application/json'}));a.download=n;a.click(); }
+function importMeetings(e){
+  const f=e.target.files[0]; if(!f) return;
+  const r=new FileReader();
+  r.onload=()=>{
+    let data; try{ data=JSON.parse(r.result); }catch(err){ alert('That file is not valid JSON.'); return; }
+    const incoming=Array.isArray(data)?data:[data];
+    const valid=incoming.filter(m=>m&&m.id&&m.utterances);
+    if(!valid.length){ alert('No meetings found in that file.'); e.target.value=''; return; }
+    const all=getMeetings(); const byId={}; all.forEach(m=>byId[m.id]=m);
+    let added=0,updated=0;
+    valid.forEach(m=>{ if(byId[m.id]) updated++; else added++; byId[m.id]=m; });
+    const merged=Object.values(byId).sort((a,b)=>(b.createdAt||'').localeCompare(a.createdAt||''));
+    lssj(STORE,merged); e.target.value=''; renderLog();
+    alert('Imported '+added+' new meeting'+(added===1?'':'s')+(updated?(', updated '+updated):'')+'. Your log now holds '+merged.length+'.');
+  };
+  r.readAsText(f);
+}
 function resetAll(){
   currentMeeting=null;selectedFile=null;
   document.getElementById('audioInput').value='';
