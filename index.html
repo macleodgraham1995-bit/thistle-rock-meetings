@@ -320,6 +320,13 @@ select option{ background:var(--panel-2); }
   <div id="resultsWrap" class="hidden" style="margin-top:22px;">
     <div class="card-title" style="margin-bottom:12px;">Meeting Record</div>
 
+    <div class="card hidden" id="speakerCard">
+      <div class="card-title">Speakers — Edit Names</div>
+      <div class="small" style="margin-bottom:12px;">The system detects each distinct voice (A, B, C, D…). Rename anyone here — including guests or a different person than expected — then tap Apply and the transcript updates. Handles however many voices were detected.</div>
+      <div id="speakerEditor"></div>
+      <button class="btn btn-ghost btn-sm mt-10" onclick="applySpeakerNames()">Apply names</button>
+    </div>
+
     <div class="result-block">
       <div class="result-head" onclick="toggleResult('rb-transcript')"><div class="result-label">🎙 Transcript — Speaker Labels</div><div class="result-toggle" id="rtb-transcript">▾ expand</div></div>
       <div class="result-body" id="rb-transcript"><div class="transcript-scroll" id="transcriptOut"></div></div>
@@ -542,7 +549,7 @@ async function runPipeline() {
   currentMeeting={
     id:Date.now().toString(), date:document.getElementById('mDate').value, type:document.getElementById('mType').value,
     title:document.getElementById('mTitle').value||document.getElementById('mType').value,
-    attendees:[...attendees], utterances, rawTranscript,
+    attendees:[...attendees], utterances, rawTranscript, spkMap:{...spkMap},
     summary:analysis.summary||'', decisions:analysis.decisions||[],
     actions:(analysis.actions||[]).map(a=>({...a,done:false})),
     properties:analysis.properties||[], quotes:analysis.quotes||[], createdAt:new Date().toISOString(),
@@ -624,6 +631,7 @@ function buildSpeakerMap(utterances,s){
   const map={}; sorted.forEach((spk,i)=>map[spk]=names[i]||('Speaker '+(i+1))); return map;
 }
 function renderResults(m) {
+  renderSpeakerEditor(m);
   const tEl=document.getElementById('transcriptOut');
   if(m.utterances&&m.utterances.length>1){
     tEl.innerHTML=m.utterances.map(u=>{
@@ -651,6 +659,29 @@ function renderResults(m) {
 }
 function toggleAction(i){ if(!currentMeeting)return; currentMeeting.actions[i].done=!currentMeeting.actions[i].done; renderResults(currentMeeting); }
 function toggleResult(id){ const body=document.getElementById(id),tog=document.getElementById('rtb-'+id.replace('rb-','')),open=body.classList.toggle('open'); if(tog)tog.textContent=open?'▴ collapse':'▾ expand'; }
+function renderSpeakerEditor(m){
+  const card=document.getElementById('speakerCard'), ed=document.getElementById('speakerEditor');
+  if(!card||!ed) return;
+  const labels=[...new Set((m.utterances||[]).map(u=>u.speaker))];
+  if(labels.length<=1){ card.classList.add('hidden'); return; }
+  card.classList.remove('hidden');
+  ed.innerHTML=labels.map(l=>{
+    const cur=(m.spkMap&&m.spkMap[l]) || ((m.utterances.find(u=>u.speaker===l)||{}).speakerName) || l;
+    const words=m.utterances.filter(u=>u.speaker===l).reduce((n,u)=>n+(u.text||'').split(' ').length,0);
+    return `<div class="field"><label class="lbl">Voice ${l} · ${words} words</label><input type="text" id="spk_${l}" value="${(cur||'').replace(/"/g,'&quot;')}" placeholder="Name for voice ${l}" /></div>`;
+  }).join('');
+}
+function applySpeakerNames(){
+  if(!currentMeeting) return;
+  const labels=[...new Set(currentMeeting.utterances.map(u=>u.speaker))];
+  currentMeeting.spkMap=currentMeeting.spkMap||{};
+  labels.forEach(l=>{ const el=document.getElementById('spk_'+l); if(el) currentMeeting.spkMap[l]=el.value.trim()||l; });
+  currentMeeting.utterances.forEach(u=>{ u.speakerName=currentMeeting.spkMap[u.speaker]||u.speakerName||u.speaker; });
+  renderResults(currentMeeting);
+  const all=getMeetings(),idx=all.findIndex(x=>x.id===currentMeeting.id);
+  if(idx>=0){ all[idx]=currentMeeting; lssj(STORE,all); }
+  showStatus('✓ Speaker names updated'+(idx>=0?' and saved.':' — remember to Save to Log.'),'success');
+}
 function saveMeeting(){ if(!currentMeeting)return; const all=getMeetings(),idx=all.findIndex(m=>m.id===currentMeeting.id); if(idx>=0)all[idx]=currentMeeting; else all.unshift(currentMeeting); lssj(STORE,all); showStatus('✓ Saved to Meeting Log.','success'); }
 function getMeetings(){ return lsj(STORE)||[]; }
 function renderLog(){
@@ -658,10 +689,11 @@ function renderLog(){
   if(!all.length){el.innerHTML=`<div class="empty-state"><div class="ei">📁</div><p>No meetings saved yet.</p></div>`;return;}
   el.innerHTML=all.map(m=>{
     const open=(m.actions||[]).filter(a=>!a.done).length;
-    return `<div class="meeting-card" onclick="loadMeeting('${m.id}')"><div class="mc-head"><div class="mc-title">${m.title||m.type}</div><div class="mc-date">${fmtDate(m.date)}</div></div><div class="mc-summary">${(m.summary||'').substring(0,150)}…</div><div class="mc-tags"><span class="tag">${m.type}</span><span class="tag">${(m.attendees||[]).join(' · ')}</span>${open?`<span class="tag tag-open">${open} open action${open>1?'s':''}</span>`:''}</div></div>`;
+    return `<div class="meeting-card" onclick="loadMeeting('${m.id}')"><div class="mc-head"><div class="mc-title">${m.title||m.type}</div><div style="display:flex;gap:8px;align-items:center;flex-shrink:0;"><span class="mc-date">${fmtDate(m.date)}</span><button class="btn btn-ghost btn-xs" title="Delete this meeting" onclick="event.stopPropagation();deleteMeeting('${m.id}')">🗑</button></div></div><div class="mc-summary">${(m.summary||'').substring(0,150)}…</div><div class="mc-tags"><span class="tag">${m.type}</span><span class="tag">${(m.attendees||[]).join(' · ')}</span>${open?`<span class="tag tag-open">${open} open action${open>1?'s':''}</span>`:''}</div></div>`;
   }).join('');
 }
 function loadMeeting(id){ const m=getMeetings().find(x=>x.id===id);if(!m)return;currentMeeting=m;document.getElementById('mDate').value=m.date;document.getElementById('mType').value=m.type;document.getElementById('mTitle').value=m.title||'';renderResults(m);document.getElementById('resultsWrap').classList.remove('hidden');showTab('new');setTimeout(()=>document.getElementById('resultsWrap').scrollIntoView({behavior:'smooth'}),120); }
+function deleteMeeting(id){ if(!confirm('Delete this meeting permanently? This cannot be undone.')) return; const all=getMeetings().filter(m=>m.id!==id); lssj(STORE,all); if(currentMeeting&&currentMeeting.id===id){ currentMeeting=null; document.getElementById('resultsWrap').classList.add('hidden'); } renderLog(); }
 function renderGlobalActions(){
   const all=getMeetings(),el=document.getElementById('globalActions');
   const open=[];all.forEach(m=>(m.actions||[]).filter(a=>!a.done).forEach(a=>open.push({...a,mTitle:m.title||m.type,mDate:m.date,mId:m.id})));
