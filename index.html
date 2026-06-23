@@ -391,7 +391,7 @@ select option{ background:var(--panel-2); }
     <div class="field"><label class="lbl">Access Code (optional)</label>
       <input type="password" id="settingsKey" placeholder="Only if you set ACCESS_TOKEN on the Worker" oninput="onSettingsKey()" /></div>
     <div class="small">Your AssemblyAI and Claude keys live <strong style="color:var(--gold-bright)">on the Cloudflare Worker</strong>, not in this page. Paste your Worker URL once and it's remembered on this device.</div>
-    <div class="small" style="margin-top:10px;opacity:.7;">Build <strong style="color:var(--gold-bright)">2026-06-23c · sync-diag</strong> — Meeting Log now shows a sync status line.</div>
+    <div class="small" style="margin-top:10px;opacity:.7;">Build <strong style="color:var(--gold-bright)">2026-06-23d · quota-fix</strong> — iPhone storage-quota fix; reads now work in memory.</div>
   </div>
   <div class="card">
     <div class="card-title">Company Profile</div>
@@ -698,15 +698,18 @@ function applySpeakerNames(){
   currentMeeting.utterances.forEach(u=>{ u.speakerName=currentMeeting.spkMap[u.speaker]||u.speakerName||u.speaker; });
   renderResults(currentMeeting);
   const all=getMeetings(),idx=all.findIndex(x=>x.id===currentMeeting.id);
-  if(idx>=0){ all[idx]=currentMeeting; lssj(STORE,all); pushMeeting(currentMeeting); }
+  if(idx>=0){ all[idx]=currentMeeting; setMeetings(all); pushMeeting(currentMeeting); }
   showStatus('✓ Speaker names updated'+(idx>=0?' and saved to the shared log.':' — remember to Save to Log.'),'success');
 }
-async function saveMeeting(){ if(!currentMeeting)return; const all=getMeetings(),idx=all.findIndex(m=>m.id===currentMeeting.id); if(idx>=0)all[idx]=currentMeeting; else all.unshift(currentMeeting); lssj(STORE,all);
+async function saveMeeting(){ if(!currentMeeting)return; const all=getMeetings(),idx=all.findIndex(m=>m.id===currentMeeting.id); if(idx>=0)all[idx]=currentMeeting; else all.unshift(currentMeeting); setMeetings(all);
   showStatus('<div class="spin"></div>&nbsp; Saving to the shared log…','info');
   const ok=await pushMeeting(currentMeeting);
   showStatus(ok?'✓ Saved to the shared log — everyone on the team can see it.':'✓ Saved on this device, but couldn’t reach the shared log. Check your Worker URL and access code in Settings, then Save again.', ok?'success':'warn');
 }
-function getMeetings(){ return lsj(STORE)||[]; }
+var MEM=null;
+function getMeetings(){ return MEM?MEM:(lsj(STORE)||[]); }
+function slimForCache(arr){ try{ return (arr||[]).map(m=>({...m, utterances:(m.utterances||[]).map(u=>({speaker:u.speaker,speakerName:u.speakerName,text:u.text,start:u.start}))})); }catch(e){ return arr; } }
+function setMeetings(arr){ MEM=arr; lssj(STORE,slimForCache(arr)); }
 // ----- shared meeting store (via the Worker) -----
 var lastSync='';
 async function pullMeetings(){
@@ -715,7 +718,7 @@ async function pullMeetings(){
     const r=await fetch(proxy+'/meetings?t='+Date.now(),{headers:pHeaders(false)});
     if(!r.ok){ lastSync='Store replied HTTP '+r.status+'.'; return getMeetings(); }
     const arr=await r.json();
-    if(Array.isArray(arr)){ lssj(STORE,arr); lastSync='✓ Loaded '+arr.length+' from the shared store.'; return arr; }
+    if(Array.isArray(arr)){ setMeetings(arr); lastSync='✓ Loaded '+arr.length+' from the shared store.'; return arr; }
     lastSync='Store sent an unexpected (non-list) response.';
   }catch(e){ lastSync='Could not reach store: '+(e&&e.message?e.message:String(e)); }
   return getMeetings();
@@ -734,14 +737,14 @@ function renderLog(){
   }).join('');
 }
 function loadMeeting(id){ const m=getMeetings().find(x=>x.id===id);if(!m)return;currentMeeting=m;document.getElementById('mDate').value=m.date;document.getElementById('mType').value=m.type;document.getElementById('mTitle').value=m.title||'';renderResults(m);document.getElementById('resultsWrap').classList.remove('hidden');showTab('new');setTimeout(()=>document.getElementById('resultsWrap').scrollIntoView({behavior:'smooth'}),120); }
-async function deleteMeeting(id){ if(!confirm('Delete this meeting permanently? This removes it for everyone on the team and cannot be undone.')) return; const all=getMeetings().filter(m=>m.id!==id); lssj(STORE,all); if(currentMeeting&&currentMeeting.id===id){ currentMeeting=null; document.getElementById('resultsWrap').classList.add('hidden'); } await pushDelete(id); renderLog(); }
+async function deleteMeeting(id){ if(!confirm('Delete this meeting permanently? This removes it for everyone on the team and cannot be undone.')) return; const all=getMeetings().filter(m=>m.id!==id); setMeetings(all); if(currentMeeting&&currentMeeting.id===id){ currentMeeting=null; document.getElementById('resultsWrap').classList.add('hidden'); } await pushDelete(id); renderLog(); }
 function renderGlobalActions(){
   const all=getMeetings(),el=document.getElementById('globalActions');
   const open=[];all.forEach(m=>(m.actions||[]).filter(a=>!a.done).forEach(a=>open.push({...a,mTitle:m.title||m.type,mDate:m.date,mId:m.id})));
   if(!open.length){el.innerHTML=`<div class="empty-state"><div class="ei">✅</div><p>All clear.</p></div>`;return;}
   el.innerHTML=`<ul class="action-list">${open.map(a=>{const oc=/carlin/i.test(a.owner)?'ab-carlin':/both/i.test(a.owner)?'ab-both':'ab-gmac';return`<li class="action-item"><div class="acheck" onclick="doneGlobal('${a.mId}','${esc(a.task)}')"></div><div class="atext">${a.task}<div style="margin-top:4px;"><span class="abadge ${oc}">${a.owner||'?'}</span><span class="abadge ab-due">${a.due||'TBD'}</span><span class="small" style="margin-left:6px;">· ${a.mTitle} (${fmtDate(a.mDate)})</span></div></div></li>`;}).join('')}</ul>`;
 }
-async function doneGlobal(mId,task){ const all=getMeetings(),m=all.find(x=>x.id===mId);if(!m)return;const a=m.actions.find(x=>x.task===task);if(a)a.done=true;lssj(STORE,all);renderGlobalActions(); await pushMeeting(m); }
+async function doneGlobal(mId,task){ const all=getMeetings(),m=all.find(x=>x.id===mId);if(!m)return;const a=m.actions.find(x=>x.task===task);if(a)a.done=true;setMeetings(all);renderGlobalActions(); await pushMeeting(m); }
 function exportCurrent(){ if(!currentMeeting)return; dlJson([currentMeeting],`TR_Meeting_${currentMeeting.date}.json`); }
 function exportAll(){ const all=getMeetings();if(!all.length){alert('No meetings yet.');return;}dlJson(all,`TR_Meetings_${today()}.json`); }
 function dlJson(d,n){ const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(d,null,2)],{type:'application/json'}));a.download=n;a.click(); }
@@ -757,7 +760,7 @@ function importMeetings(e){
     let added=0,updated=0;
     valid.forEach(m=>{ if(byId[m.id]) updated++; else added++; byId[m.id]=m; });
     const merged=Object.values(byId).sort((a,b)=>(b.createdAt||'').localeCompare(a.createdAt||''));
-    lssj(STORE,merged); e.target.value='';
+    setMeetings(merged); e.target.value='';
     for(const m of valid){ await pushMeeting(m); }
     await pullMeetings(); renderLog();
     alert('Imported '+added+' new meeting'+(added===1?'':'s')+(updated?(', updated '+updated):'')+' into the shared log. The log now holds '+getMeetings().length+'.');
@@ -790,7 +793,7 @@ function esc(s){ return(s||'').replace(/'/g,"\\'").replace(/"/g,'&quot;'); }
 function ls(k){ return localStorage.getItem(k); }
 function lss(k,v){ localStorage.setItem(k,v); }
 function lsj(k){ try{return JSON.parse(localStorage.getItem(k));}catch{return null;} }
-function lssj(k,v){ localStorage.setItem(k,JSON.stringify(v)); }
+function lssj(k,v){ try{ localStorage.setItem(k,JSON.stringify(v)); return true; }catch(e){ return false; } }
 boot();
 </script>
 </body>
