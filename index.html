@@ -250,6 +250,14 @@ select option{ background:var(--panel-2); }
     </div>
     <div class="field"><label class="lbl">Title / Focus (optional)</label>
       <input type="text" id="mTitle" placeholder="e.g. 4220 Centre Street closing, Q3 pipeline…" /></div>
+    <div class="field"><label class="lbl">Expected speakers (helps separate voices)</label>
+      <select id="mSpeakers">
+        <option value="2">2 people</option>
+        <option value="3">3 people</option>
+        <option value="4">4 people</option>
+        <option value="5">5 people</option>
+        <option value="0">Auto-detect</option>
+      </select></div>
   </div>
 
   <div class="card">
@@ -430,7 +438,7 @@ function boot() {
   if (s.spkB) document.getElementById('spkB').value = s.spkB;
   if (s.spkC) document.getElementById('spkC').value = s.spkC;
   if (s.attendees) attendees = s.attendees;
-  renderChips(); refreshProxyWarn();
+  renderChips(); refreshProxyWarn(); pullMeetings();
   const dz = document.getElementById('dropZone');
   dz.addEventListener('dragover', e=>{e.preventDefault();dz.classList.add('over');});
   dz.addEventListener('dragleave', ()=>dz.classList.remove('over'));
@@ -439,8 +447,8 @@ function boot() {
 function showTab(t) {
   ['new','log','actions','settings'].forEach(x=>document.getElementById('tab-'+x).classList.toggle('hidden',x!==t));
   document.querySelectorAll('nav button').forEach((b,i)=>b.classList.toggle('active',['new','log','actions','settings'][i]===t));
-  if(t==='log') renderLog();
-  if(t==='actions') renderGlobalActions();
+  if(t==='log') loadLog();
+  if(t==='actions') loadActions();
   if(t==='new') refreshProxyWarn();
 }
 function onKeyInput()    { const v=document.getElementById('keyInput').value.trim();    lss(KKEY,v); document.getElementById('settingsKey').value=v; setKeyPill(v.length>0); }
@@ -597,7 +605,10 @@ async function aaiUpload(file) {
   return (await r.json()).upload_url;
 }
 async function aaiSubmit(url) {
-  const r=await fetch(getProxy()+'/transcript',{method:'POST',headers:pHeaders(true),body:JSON.stringify({audio_url:url,speaker_labels:true,speakers_expected:Math.max(attendees.length,2)})});
+  const exp=parseInt((document.getElementById('mSpeakers')||{}).value||'2',10);
+  const payload={audio_url:url,speaker_labels:true};
+  if(exp>0) payload.speakers_expected=exp;
+  const r=await fetch(getProxy()+'/transcript',{method:'POST',headers:pHeaders(true),body:JSON.stringify(payload)});
   if(!r.ok) throw new Error('HTTP '+r.status);
   const d=await r.json(); if(d.error) throw new Error(d.error); return d.id;
 }
@@ -665,12 +676,16 @@ function toggleResult(id){ const body=document.getElementById(id),tog=document.g
 function renderSpeakerEditor(m){
   const card=document.getElementById('speakerCard'), ed=document.getElementById('speakerEditor');
   if(!card||!ed) return;
-  const labels=[...new Set((m.utterances||[]).map(u=>u.speaker))];
-  if(labels.length<=1){ card.classList.add('hidden'); return; }
+  const utts=m.utterances||[];
+  const labels=[...new Set(utts.map(u=>u.speaker))];
+  if(utts.length<=1){ card.classList.add('hidden'); return; } // pasted transcript — nothing to label
   card.classList.remove('hidden');
-  ed.innerHTML=labels.map(l=>{
-    const cur=(m.spkMap&&m.spkMap[l]) || ((m.utterances.find(u=>u.speaker===l)||{}).speakerName) || l;
-    const words=m.utterances.filter(u=>u.speaker===l).reduce((n,u)=>n+(u.text||'').split(' ').length,0);
+  const note = labels.length<=1
+    ? '<div class="status-bar s-warn" style="margin-bottom:12px;">Only one voice was detected on this recording, so it couldn’t be split by speaker. For next time: record a longer back-and-forth, take clear turns with a small gap, and set “Expected speakers” before recording.</div>'
+    : '';
+  ed.innerHTML = note + labels.map(l=>{
+    const cur=(m.spkMap&&m.spkMap[l]) || ((utts.find(u=>u.speaker===l)||{}).speakerName) || l;
+    const words=utts.filter(u=>u.speaker===l).reduce((n,u)=>n+(u.text||'').split(' ').length,0);
     return `<div class="field"><label class="lbl">Voice ${l} · ${words} words</label><input type="text" id="spk_${l}" value="${(cur||'').replace(/"/g,'&quot;')}" placeholder="Name for voice ${l}" /></div>`;
   }).join('');
 }
@@ -685,8 +700,22 @@ function applySpeakerNames(){
   if(idx>=0){ all[idx]=currentMeeting; lssj(STORE,all); }
   showStatus('✓ Speaker names updated'+(idx>=0?' and saved.':' — remember to Save to Log.'),'success');
 }
-function saveMeeting(){ if(!currentMeeting)return; const all=getMeetings(),idx=all.findIndex(m=>m.id===currentMeeting.id); if(idx>=0)all[idx]=currentMeeting; else all.unshift(currentMeeting); lssj(STORE,all); showStatus('✓ Saved to Meeting Log.','success'); }
+async function saveMeeting(){ if(!currentMeeting)return; const all=getMeetings(),idx=all.findIndex(m=>m.id===currentMeeting.id); if(idx>=0)all[idx]=currentMeeting; else all.unshift(currentMeeting); lssj(STORE,all);
+  showStatus('<div class="spin"></div>&nbsp; Saving to the shared log…','info');
+  const ok=await pushMeeting(currentMeeting);
+  showStatus(ok?'✓ Saved to the shared log — everyone on the team can see it.':'✓ Saved on this device, but couldn’t reach the shared log. Check your Worker URL and access code in Settings, then Save again.', ok?'success':'warn');
+}
 function getMeetings(){ return lsj(STORE)||[]; }
+// ----- shared meeting store (via the Worker) -----
+async function pullMeetings(){
+  const proxy=getProxy(); if(!proxy) return getMeetings();
+  try{ const r=await fetch(proxy+'/meetings',{headers:pHeaders(false)}); if(!r.ok) return getMeetings(); const arr=await r.json(); if(Array.isArray(arr)){ lssj(STORE,arr); return arr; } }catch(e){}
+  return getMeetings();
+}
+async function pushMeeting(m){ const proxy=getProxy(); if(!proxy) return false; try{ const r=await fetch(proxy+'/meetings',{method:'POST',headers:pHeaders(true),body:JSON.stringify(m)}); return r.ok; }catch(e){ return false; } }
+async function pushDelete(id){ const proxy=getProxy(); if(!proxy) return false; try{ const r=await fetch(proxy+'/meetings/delete',{method:'POST',headers:pHeaders(true),body:JSON.stringify({id})}); return r.ok; }catch(e){ return false; } }
+async function loadLog(){ document.getElementById('logList').innerHTML='<div class="empty-state"><div class="spin" style="margin:0 auto;"></div><p>Loading the shared log…</p></div>'; await pullMeetings(); renderLog(); }
+async function loadActions(){ await pullMeetings(); renderGlobalActions(); }
 function renderLog(){
   const all=getMeetings(),el=document.getElementById('logList');
   if(!all.length){el.innerHTML=`<div class="empty-state"><div class="ei">📁</div><p>No meetings saved yet.</p></div>`;return;}
@@ -696,21 +725,21 @@ function renderLog(){
   }).join('');
 }
 function loadMeeting(id){ const m=getMeetings().find(x=>x.id===id);if(!m)return;currentMeeting=m;document.getElementById('mDate').value=m.date;document.getElementById('mType').value=m.type;document.getElementById('mTitle').value=m.title||'';renderResults(m);document.getElementById('resultsWrap').classList.remove('hidden');showTab('new');setTimeout(()=>document.getElementById('resultsWrap').scrollIntoView({behavior:'smooth'}),120); }
-function deleteMeeting(id){ if(!confirm('Delete this meeting permanently? This cannot be undone.')) return; const all=getMeetings().filter(m=>m.id!==id); lssj(STORE,all); if(currentMeeting&&currentMeeting.id===id){ currentMeeting=null; document.getElementById('resultsWrap').classList.add('hidden'); } renderLog(); }
+async function deleteMeeting(id){ if(!confirm('Delete this meeting permanently? This removes it for everyone on the team and cannot be undone.')) return; const all=getMeetings().filter(m=>m.id!==id); lssj(STORE,all); if(currentMeeting&&currentMeeting.id===id){ currentMeeting=null; document.getElementById('resultsWrap').classList.add('hidden'); } await pushDelete(id); renderLog(); }
 function renderGlobalActions(){
   const all=getMeetings(),el=document.getElementById('globalActions');
   const open=[];all.forEach(m=>(m.actions||[]).filter(a=>!a.done).forEach(a=>open.push({...a,mTitle:m.title||m.type,mDate:m.date,mId:m.id})));
   if(!open.length){el.innerHTML=`<div class="empty-state"><div class="ei">✅</div><p>All clear.</p></div>`;return;}
   el.innerHTML=`<ul class="action-list">${open.map(a=>{const oc=/carlin/i.test(a.owner)?'ab-carlin':/both/i.test(a.owner)?'ab-both':'ab-gmac';return`<li class="action-item"><div class="acheck" onclick="doneGlobal('${a.mId}','${esc(a.task)}')"></div><div class="atext">${a.task}<div style="margin-top:4px;"><span class="abadge ${oc}">${a.owner||'?'}</span><span class="abadge ab-due">${a.due||'TBD'}</span><span class="small" style="margin-left:6px;">· ${a.mTitle} (${fmtDate(a.mDate)})</span></div></div></li>`;}).join('')}</ul>`;
 }
-function doneGlobal(mId,task){ const all=getMeetings(),m=all.find(x=>x.id===mId);if(!m)return;const a=m.actions.find(x=>x.task===task);if(a)a.done=true;lssj(STORE,all);renderGlobalActions(); }
+async function doneGlobal(mId,task){ const all=getMeetings(),m=all.find(x=>x.id===mId);if(!m)return;const a=m.actions.find(x=>x.task===task);if(a)a.done=true;lssj(STORE,all);renderGlobalActions(); await pushMeeting(m); }
 function exportCurrent(){ if(!currentMeeting)return; dlJson([currentMeeting],`TR_Meeting_${currentMeeting.date}.json`); }
 function exportAll(){ const all=getMeetings();if(!all.length){alert('No meetings yet.');return;}dlJson(all,`TR_Meetings_${today()}.json`); }
 function dlJson(d,n){ const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(d,null,2)],{type:'application/json'}));a.download=n;a.click(); }
 function importMeetings(e){
   const f=e.target.files[0]; if(!f) return;
   const r=new FileReader();
-  r.onload=()=>{
+  r.onload=async ()=>{
     let data; try{ data=JSON.parse(r.result); }catch(err){ alert('That file is not valid JSON.'); return; }
     const incoming=Array.isArray(data)?data:[data];
     const valid=incoming.filter(m=>m&&m.id&&m.utterances);
@@ -719,8 +748,10 @@ function importMeetings(e){
     let added=0,updated=0;
     valid.forEach(m=>{ if(byId[m.id]) updated++; else added++; byId[m.id]=m; });
     const merged=Object.values(byId).sort((a,b)=>(b.createdAt||'').localeCompare(a.createdAt||''));
-    lssj(STORE,merged); e.target.value=''; renderLog();
-    alert('Imported '+added+' new meeting'+(added===1?'':'s')+(updated?(', updated '+updated):'')+'. Your log now holds '+merged.length+'.');
+    lssj(STORE,merged); e.target.value='';
+    for(const m of valid){ await pushMeeting(m); }
+    await pullMeetings(); renderLog();
+    alert('Imported '+added+' new meeting'+(added===1?'':'s')+(updated?(', updated '+updated):'')+' into the shared log. The log now holds '+getMeetings().length+'.');
   };
   r.readAsText(f);
 }
