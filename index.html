@@ -391,7 +391,7 @@ select option{ background:var(--panel-2); }
     <div class="field"><label class="lbl">Access Code (optional)</label>
       <input type="password" id="settingsKey" placeholder="Only if you set ACCESS_TOKEN on the Worker" oninput="onSettingsKey()" /></div>
     <div class="small">Your AssemblyAI and Claude keys live <strong style="color:var(--gold-bright)">on the Cloudflare Worker</strong>, not in this page. Paste your Worker URL once and it's remembered on this device.</div>
-    <div class="small" style="margin-top:10px;opacity:.7;">Build <strong style="color:var(--gold-bright)">2026-06-23b · ios-pull-fix</strong> — if you see this line, the iPhone pull fix is live.</div>
+    <div class="small" style="margin-top:10px;opacity:.7;">Build <strong style="color:var(--gold-bright)">2026-06-23c · sync-diag</strong> — Meeting Log now shows a sync status line.</div>
   </div>
   <div class="card">
     <div class="card-title">Company Profile</div>
@@ -708,9 +708,16 @@ async function saveMeeting(){ if(!currentMeeting)return; const all=getMeetings()
 }
 function getMeetings(){ return lsj(STORE)||[]; }
 // ----- shared meeting store (via the Worker) -----
+var lastSync='';
 async function pullMeetings(){
-  const proxy=getProxy(); if(!proxy) return getMeetings();
-  try{ const r=await fetch(proxy+'/meetings?t='+Date.now(),{headers:pHeaders(false)}); if(!r.ok) return getMeetings(); const arr=await r.json(); if(Array.isArray(arr)){ lssj(STORE,arr); return arr; } }catch(e){}
+  const proxy=getProxy(); if(!proxy){ lastSync='No Worker URL set in Settings.'; return getMeetings(); }
+  try{
+    const r=await fetch(proxy+'/meetings?t='+Date.now(),{headers:pHeaders(false)});
+    if(!r.ok){ lastSync='Store replied HTTP '+r.status+'.'; return getMeetings(); }
+    const arr=await r.json();
+    if(Array.isArray(arr)){ lssj(STORE,arr); lastSync='✓ Loaded '+arr.length+' from the shared store.'; return arr; }
+    lastSync='Store sent an unexpected (non-list) response.';
+  }catch(e){ lastSync='Could not reach store: '+(e&&e.message?e.message:String(e)); }
   return getMeetings();
 }
 async function pushMeeting(m){ const proxy=getProxy(); if(!proxy) return false; try{ const r=await fetch(proxy+'/meetings',{method:'POST',headers:pHeaders(true),body:JSON.stringify(m)}); return r.ok; }catch(e){ return false; } }
@@ -719,8 +726,9 @@ async function loadLog(){ document.getElementById('logList').innerHTML='<div cla
 async function loadActions(){ await pullMeetings(); renderGlobalActions(); }
 function renderLog(){
   const all=getMeetings(),el=document.getElementById('logList');
-  if(!all.length){el.innerHTML=`<div class="empty-state"><div class="ei">📁</div><p>No meetings saved yet.</p></div>`;return;}
-  el.innerHTML=all.map(m=>{
+  const diag=lastSync?`<div class="small" style="margin-bottom:10px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;opacity:.9;">Sync status: ${lastSync}</div>`:'';
+  if(!all.length){el.innerHTML=diag+`<div class="empty-state"><div class="ei">📁</div><p>No meetings saved yet.</p></div>`;return;}
+  el.innerHTML=diag+all.map(m=>{
     const open=(m.actions||[]).filter(a=>!a.done).length;
     return `<div class="meeting-card" onclick="loadMeeting('${m.id}')"><div class="mc-head"><div class="mc-title">${m.title||m.type}</div><div style="display:flex;gap:8px;align-items:center;flex-shrink:0;"><span class="mc-date">${fmtDate(m.date)}</span><button class="btn btn-ghost btn-xs" title="Delete this meeting" onclick="event.stopPropagation();deleteMeeting('${m.id}')">🗑</button></div></div><div class="mc-summary">${(m.summary||'').substring(0,150)}…</div><div class="mc-tags"><span class="tag">${m.type}</span><span class="tag">${(m.attendees||[]).join(' · ')}</span>${open?`<span class="tag tag-open">${open} open action${open>1?'s':''}</span>`:''}</div></div>`;
   }).join('');
