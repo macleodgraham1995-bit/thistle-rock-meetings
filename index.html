@@ -1,214 +1,287 @@
 <!DOCTYPE html>
+<!-- Thistle Rock Meeting Intelligence v3.0 — HARDENED BUILD 2026-07-02
+     Safeguards: IndexedDB audio+meeting persistence with recovery banner · auto-process ·
+     auto-save to device AND shared team log · leave-page warning · cloud/local MERGE sync
+     (never overwrites local-only meetings) · storage-quota-safe writes · dual mode
+     (Cloudflare Worker proxy preferred, direct AssemblyAI key fallback) -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>Thistle Rock — Meeting Intelligence</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
-/* ===== Thistle Rock heritage brand: navy · antique gold · carved stone ===== */
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+
 :root {
-  --navy:       #02101E;   /* page (matches logo) */
-  --navy-2:     #0A1C2E;   /* raised surface */
-  --panel:      #0C2032;   /* cards */
-  --panel-2:    #0F2638;   /* inputs */
-  --border:     rgba(194,160,90,0.20);
-  --border-2:   rgba(255,255,255,0.07);
-  --gold:       #C2A05A;
-  --gold-bright:#E0C886;
-  --gold-dim:   #8C7244;
-  --silver:     #D7DCE3;
-  --text:       #C7CFD9;
-  --text-2:     #94A1B0;
-  --muted:      #6E7E8F;
-  --green:#5BA86B; --green-bg:rgba(91,168,107,.12);
-  --red:  #D2685C; --red-bg:rgba(210,104,92,.12);
-  --amber:#D6A24E; --amber-bg:rgba(214,162,78,.12);
-  --r: 11px;
-  --shadow: 0 1px 2px rgba(0,0,0,.4), 0 6px 18px rgba(0,0,0,.28);
+  --ink:      #141414;
+  --deep:     #1c1c1e;
+  --surface:  #252528;
+  --panel:    #2e2e32;
+  --border:   #3a3a3f;
+  --muted:    #6b6b72;
+  --mid:      #9a9aa5;
+  --light:    #d8d8e0;
+  --white:    #f0ede8;
+  --thistle:  #8b7aa0;
+  --thistle2: #b09ecb;
+  --gold:     #c8a96e;
+  --gold2:    #dfc08a;
+  --rock:     #7a8a72;
+  --rock2:    #9fb595;
+  --danger:   #b05555;
+  --r:        10px;
 }
-* { box-sizing: border-box; margin:0; padding:0; }
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
 body {
-  background:
-    radial-gradient(1200px 500px at 50% -200px, #0A2138 0%, var(--navy) 60%),
-    var(--navy);
-  background-attachment: fixed;
-  color: var(--text);
-  font-family:'Inter',-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
-  font-size:15px; line-height:1.6; min-height:100vh; -webkit-font-smoothing:antialiased;
+  background: var(--ink); color: var(--light);
+  font-family: 'Inter', sans-serif; font-size: 15px; line-height: 1.6;
+  min-height: 100vh; -webkit-font-smoothing: antialiased;
 }
 
-/* Header */
 header {
-  background: rgba(2,16,30,0.92); backdrop-filter: blur(6px);
-  border-bottom:1px solid var(--border);
-  padding:0 22px; height:66px; display:flex; align-items:center; justify-content:space-between;
-  position:sticky; top:0; z-index:200;
+  background: var(--deep); border-bottom: 1px solid var(--border);
+  padding: 0 20px; display: flex; align-items: center;
+  justify-content: space-between; height: 58px;
+  position: sticky; top: 0; z-index: 200;
 }
-.brand { display:flex; align-items:center; gap:13px; }
-.brand-emblem { height:46px; width:auto; display:block; filter: drop-shadow(0 1px 3px rgba(0,0,0,.5)); }
-.brand-name { font-family:'Cinzel',serif; font-size:19px; font-weight:600; letter-spacing:.08em; color:var(--silver); line-height:1.05; }
-.brand-sub  { font-size:9.5px; color:var(--gold); letter-spacing:.32em; text-transform:uppercase; margin-top:2px; }
-
-/* Nav */
-nav { background: rgba(10,28,46,0.6); border-bottom:1px solid var(--border-2); display:flex; padding:0 16px; overflow-x:auto; scrollbar-width:none; position:sticky; top:66px; z-index:190; }
-nav::-webkit-scrollbar{ display:none; }
-nav button { background:none; border:none; border-bottom:2px solid transparent; color:var(--text-2); padding:13px 16px; font:inherit; font-size:13px; font-weight:500; cursor:pointer; white-space:nowrap; transition:color .15s,border-color .15s; }
-nav button:hover{ color:var(--silver); }
-nav button.active{ color:var(--gold-bright); border-bottom-color:var(--gold); }
-
-main { max-width:860px; margin:0 auto; padding:24px 16px 90px; }
-
-/* Cards */
-.card { background:var(--panel); border:1px solid var(--border-2); border-radius:var(--r); padding:20px; margin-bottom:14px; box-shadow:var(--shadow); }
-.card-title { font-family:'Cinzel',serif; font-size:12px; letter-spacing:.14em; text-transform:uppercase; font-weight:600; color:var(--gold); margin-bottom:16px; display:flex; align-items:center; gap:12px; }
-.card-title::after{ content:''; flex:1; height:1px; background:linear-gradient(90deg,var(--border),transparent); }
-
-/* Record */
-.record-zone{ display:flex; flex-direction:column; align-items:center; padding:26px 20px 18px; gap:12px; }
-.record-btn{ width:88px; height:88px; border-radius:50%; border:1px solid rgba(255,255,255,.12); cursor:pointer; color:#fff; font-size:34px; display:flex; align-items:center; justify-content:center; background:radial-gradient(circle at 35% 30%, #d8453a, #8f241b); box-shadow:0 8px 22px rgba(160,30,20,.35); transition:transform .12s; }
-.record-btn:active{ transform:scale(.95); }
-.record-btn.recording{ animation:pulse 1.3s infinite; }
-@keyframes pulse{ 0%,100%{ box-shadow:0 0 0 0 rgba(216,69,58,.5);} 50%{ box-shadow:0 0 0 16px rgba(216,69,58,0);} }
-.record-label{ font-family:'Cinzel',serif; font-size:14px; font-weight:500; letter-spacing:.04em; color:var(--silver); }
-.record-timer{ font-size:28px; font-weight:700; color:var(--gold-bright); font-variant-numeric:tabular-nums; letter-spacing:.05em; }
-.record-hint{ font-size:12px; color:var(--muted); text-align:center; line-height:1.6; padding:0 8px; }
-
-/* Upload */
-.upload-zone{ border:1.5px dashed var(--border); border-radius:var(--r); padding:24px 20px; text-align:center; cursor:pointer; transition:all .18s; position:relative; background:rgba(255,255,255,.015); }
-.upload-zone:hover,.upload-zone.over{ border-color:var(--gold); background:rgba(194,160,90,.06); }
-.upload-zone input[type=file]{ position:absolute; inset:0; opacity:0; cursor:pointer; width:100%; height:100%; }
-.upload-icon{ font-size:24px; margin-bottom:6px; }
-.upload-title{ font-size:14px; font-weight:600; color:var(--silver); margin-bottom:2px; }
-.upload-sub{ font-size:12px; color:var(--muted); }
-.file-pill{ display:flex; align-items:center; gap:10px; background:rgba(194,160,90,.08); border:1px solid var(--border); border-radius:8px; padding:11px 14px; margin-top:12px; font-size:13px; }
-.file-pill-name{ font-weight:600; color:var(--gold-bright); flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.file-pill-size{ color:var(--muted); font-size:12px; flex-shrink:0; }
-
-/* Buttons */
-.btn{ display:inline-flex; align-items:center; justify-content:center; gap:6px; padding:10px 18px; border-radius:8px; font:inherit; font-size:13px; font-weight:600; cursor:pointer; border:1px solid transparent; transition:all .15s; white-space:nowrap; letter-spacing:.02em; }
-.btn-gold,.btn-primary{ background:linear-gradient(135deg,var(--gold-bright),var(--gold)); color:#1a1205; border-color:rgba(0,0,0,.15); }
-.btn-gold:hover,.btn-primary:hover{ filter:brightness(1.07); }
-.btn-ghost{ background:transparent; color:var(--gold-bright); border-color:var(--border); }
-.btn-ghost:hover{ border-color:var(--gold); background:rgba(194,160,90,.08); }
-.btn-danger{ background:var(--red); color:#fff; }
-.btn-sm{ padding:7px 12px; font-size:12px; border-radius:6px; }
-.btn-xs{ padding:4px 9px; font-size:11px; border-radius:5px; }
-.btn:disabled{ opacity:.4; cursor:not-allowed; pointer-events:none; }
-header .btn-ghost{ color:var(--gold-bright); }
-
-/* Form */
-.field{ margin-bottom:14px; } .field:last-child{ margin-bottom:0; }
-label.lbl{ display:block; font-size:11px; font-weight:600; color:var(--text-2); margin-bottom:6px; letter-spacing:.08em; text-transform:uppercase; }
-input[type=text],input[type=date],input[type=password],textarea,select{
-  width:100%; background:var(--panel-2); border:1px solid var(--border-2); border-radius:7px; color:var(--text);
-  font:inherit; font-size:14px; padding:10px 13px; outline:none; transition:border-color .15s,box-shadow .15s;
+.brand { display: flex; align-items: center; gap: 11px; }
+.brand-mark {
+  width: 34px; height: 34px;
+  background: linear-gradient(145deg, var(--thistle) 0%, var(--gold) 100%);
+  border-radius: 8px; display: flex; align-items: center;
+  justify-content: center; font-size: 17px; flex-shrink: 0;
 }
-input::placeholder,textarea::placeholder{ color:var(--muted); }
-input:focus,textarea:focus,select:focus{ border-color:var(--gold); box-shadow:0 0 0 3px rgba(194,160,90,.15); }
-textarea{ resize:vertical; min-height:80px; line-height:1.65; }
-input[type=date]{ color-scheme: dark; }
-select{ background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23C2A05A' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right 12px center; padding-right:32px; -webkit-appearance:none; appearance:none; }
-select option{ background:var(--panel-2); }
-.grid-2{ display:grid; grid-template-columns:1fr 1fr; gap:12px; }
-@media (max-width:520px){ .grid-2{ grid-template-columns:1fr; } }
+.brand-name { font-family: 'Playfair Display', serif; font-size: 17px; color: var(--white); letter-spacing: 0.02em; line-height: 1.2; }
+.brand-sub  { font-size: 10px; color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase; }
 
-/* Attendees */
-.attendee-row{ display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-bottom:10px; }
-.chip{ display:inline-flex; align-items:center; gap:6px; background:var(--panel-2); border:1px solid var(--border-2); border-radius:20px; padding:5px 12px; font-size:13px; color:var(--text); }
-.chip.gmac{ border-color:var(--gold); color:var(--gold-bright); background:rgba(194,160,90,.1); }
-.chip.carlin{ border-color:rgba(215,220,227,.4); color:var(--silver); background:rgba(215,220,227,.07); }
-.chip-remove{ background:none; border:none; color:var(--muted); cursor:pointer; font-size:14px; line-height:1; padding:0 0 0 2px; }
-.chip-remove:hover{ color:var(--red); }
-.add-row{ display:flex; gap:8px; align-items:center; } .add-row input{ flex:1; }
+nav {
+  background: var(--deep); border-bottom: 1px solid var(--border);
+  display: flex; padding: 0 16px; overflow-x: auto;
+  -webkit-overflow-scrolling: touch; scrollbar-width: none;
+}
+nav::-webkit-scrollbar { display: none; }
+nav button {
+  background: none; border: none; border-bottom: 2px solid transparent;
+  color: var(--muted); padding: 11px 16px; font-size: 13px;
+  font-family: 'Inter', sans-serif; font-weight: 500; cursor: pointer;
+  white-space: nowrap; transition: color 0.18s, border-color 0.18s;
+}
+nav button:hover { color: var(--light); }
+nav button.active { color: var(--thistle2); border-bottom-color: var(--thistle2); }
 
-/* Connection bar */
-.key-bar{ background:var(--panel); border:1px solid var(--border-2); border-radius:var(--r); padding:13px 16px; display:flex; align-items:center; gap:10px; margin-bottom:16px; flex-wrap:wrap; box-shadow:var(--shadow); }
-.key-bar label{ font-size:11px; color:var(--text-2); white-space:nowrap; letter-spacing:.08em; text-transform:uppercase; font-weight:600; }
-.key-bar input{ flex:1; min-width:160px; font-size:13px; padding:8px 11px; }
-.key-pill{ font-size:10px; padding:4px 10px; border-radius:20px; white-space:nowrap; font-weight:600; }
-.key-set{ background:var(--green-bg); color:var(--green); }
-.key-unset{ background:rgba(255,255,255,.06); color:var(--muted); }
+main { max-width: 820px; margin: 0 auto; padding: 24px 16px 80px; }
 
-/* Pipeline */
-.pipeline{ display:flex; align-items:center; margin:18px 0 10px; overflow-x:auto; gap:4px; padding-bottom:2px; }
-.pipe-step{ flex:1; min-width:56px; text-align:center; padding:9px 4px 7px; border-radius:7px; font-size:10px; letter-spacing:.04em; text-transform:uppercase; color:var(--muted); background:var(--panel); border:1px solid var(--border-2); transition:all .25s; font-weight:600; }
-.pipe-step .si{ display:block; font-size:14px; margin-bottom:3px; }
-.pipe-step.active{ color:var(--gold-bright); border-color:var(--gold); background:rgba(194,160,90,.1); }
-.pipe-step.done{ color:var(--green); border-color:rgba(91,168,107,.4); background:var(--green-bg); }
-.pipe-arr{ color:var(--border); font-size:12px; flex-shrink:0; }
-.prog-wrap{ height:4px; background:rgba(255,255,255,.06); border-radius:2px; overflow:hidden; margin-bottom:10px; }
-.prog-fill{ height:100%; background:linear-gradient(90deg,var(--gold),var(--gold-bright)); border-radius:2px; transition:width .5s ease; width:0%; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r); padding: 20px; margin-bottom: 14px; }
+.card-title { font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--gold); margin-bottom: 16px; display: flex; align-items: center; gap: 10px; }
+.card-title::after { content:''; flex:1; height:1px; background:var(--border); }
 
-/* Status */
-.status-bar{ padding:11px 14px; border-radius:8px; font-size:13px; margin-bottom:12px; display:flex; align-items:center; gap:10px; line-height:1.4; border:1px solid; }
-.s-info{ background:rgba(194,160,90,.08); border-color:var(--border); color:var(--gold-bright); }
-.s-success{ background:var(--green-bg); border-color:rgba(91,168,107,.4); color:var(--green); }
-.s-warn{ background:var(--amber-bg); border-color:rgba(214,162,78,.4); color:var(--amber); }
-.s-error{ background:var(--red-bg); border-color:rgba(210,104,92,.4); color:var(--red); }
-@keyframes spin{ to{ transform:rotate(360deg);} }
-.spin{ width:15px; height:15px; border:2px solid var(--border-2); border-top-color:var(--gold); border-radius:50%; animation:spin .7s linear infinite; flex-shrink:0; }
+/* ── RECORD ZONE ── */
+.record-zone {
+  display: flex; flex-direction: column; align-items: center;
+  padding: 28px 20px 20px; gap: 14px;
+}
+.record-btn {
+  width: 84px; height: 84px; border-radius: 50%;
+  border: none; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 34px;
+  background: linear-gradient(145deg, #c0392b, #e74c3c);
+  box-shadow: 0 4px 20px rgba(231,76,60,0.35);
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 0.15s;
+}
+.record-btn:active { transform: scale(0.95); }
+.record-label {
+  font-size: 13px; font-weight: 500; color: var(--mid);
+  letter-spacing: 0.03em; text-align: center; line-height: 1.5;
+}
+.record-hint {
+  font-size: 12px; color: var(--muted); text-align: center;
+  line-height: 1.6; padding: 0 10px;
+}
 
-/* Results */
-.result-block{ background:var(--panel); border:1px solid var(--border-2); border-radius:var(--r); margin-bottom:12px; overflow:hidden; box-shadow:var(--shadow); }
-.result-head{ padding:12px 16px; display:flex; align-items:center; justify-content:space-between; cursor:pointer; user-select:none; }
-.result-head:hover{ background:rgba(255,255,255,.02); }
-.result-label{ font-family:'Cinzel',serif; font-size:12px; font-weight:600; letter-spacing:.1em; text-transform:uppercase; color:var(--gold); display:flex; align-items:center; gap:8px; }
-.result-toggle{ font-size:11px; color:var(--muted); }
-.result-body{ padding:0 16px; max-height:0; overflow:hidden; transition:max-height .3s ease,padding .3s; }
-.result-body.open{ padding:14px 16px; max-height:2400px; }
-.transcript-scroll{ max-height:340px; overflow-y:auto; background:var(--navy-2); border:1px solid var(--border-2); border-radius:7px; padding:14px; }
-.utterance{ margin-bottom:14px; } .utterance:last-child{ margin-bottom:0; }
-.spk-label{ font-size:11px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; margin-bottom:3px; display:flex; align-items:center; gap:6px; }
-.spk-gmac{ color:var(--gold-bright); } .spk-carlin{ color:var(--silver); } .spk-other{ color:var(--text-2); }
-.spk-text{ font-size:13px; line-height:1.7; color:var(--text); }
-.spk-time{ font-size:10px; color:var(--muted); font-family:monospace; }
-.action-list{ list-style:none; }
-.action-item{ display:flex; align-items:flex-start; gap:11px; padding:10px 0; border-bottom:1px solid var(--border-2); }
-.action-item:last-child{ border-bottom:none; }
-.acheck{ width:18px; height:18px; border:2px solid var(--border); border-radius:4px; flex-shrink:0; cursor:pointer; display:flex; align-items:center; justify-content:center; margin-top:2px; transition:all .15s; font-size:10px; color:#1a1205; }
-.acheck:hover{ border-color:var(--gold); }
-.acheck.done{ background:var(--green); border-color:var(--green); color:#fff; }
-.atext{ flex:1; font-size:13px; line-height:1.5; }
-.atext.struck{ text-decoration:line-through; opacity:.5; }
-.abadge{ font-size:10px; padding:2px 8px; border-radius:20px; display:inline-block; margin-top:4px; margin-right:5px; font-weight:600; }
-.ab-gmac{ background:rgba(194,160,90,.14); color:var(--gold-bright); }
-.ab-carlin{ background:rgba(215,220,227,.1); color:var(--silver); }
-.ab-both{ background:var(--green-bg); color:var(--green); }
-.ab-due{ background:rgba(255,255,255,.05); color:var(--text-2); border:1px solid var(--border-2); }
-.meeting-card{ background:var(--panel); border:1px solid var(--border-2); border-radius:var(--r); padding:15px 17px; margin-bottom:9px; cursor:pointer; transition:border-color .15s; box-shadow:var(--shadow); }
-.meeting-card:hover{ border-color:var(--gold); }
-.mc-head{ display:flex; justify-content:space-between; align-items:flex-start; gap:10px; }
-.mc-title{ font-family:'Cinzel',serif; font-size:14px; font-weight:600; color:var(--silver); }
-.mc-date{ font-size:11px; color:var(--muted); font-family:monospace; flex-shrink:0; }
-.mc-summary{ font-size:12px; color:var(--text-2); margin-top:5px; line-height:1.5; }
-.mc-tags{ display:flex; gap:6px; margin-top:9px; flex-wrap:wrap; }
-.tag{ font-size:10px; padding:2px 8px; border-radius:20px; background:rgba(255,255,255,.05); border:1px solid var(--border-2); color:var(--text-2); }
-.tag-open{ border-color:rgba(214,162,78,.4); color:var(--amber); background:var(--amber-bg); }
-.divider{ display:flex; align-items:center; gap:12px; margin:6px 0 16px; color:var(--muted); font-size:11px; letter-spacing:.08em; text-transform:uppercase; }
-.divider::before,.divider::after{ content:''; flex:1; height:1px; background:var(--border-2); }
-.hidden{ display:none !important; }
-.flex{ display:flex; } .fw{ flex-wrap:wrap; } .gap-12{ gap:12px; }
-.mt-10{ margin-top:10px; } .mt-16{ margin-top:16px; }
-.small{ font-size:12px; color:var(--muted); line-height:1.5; }
-.empty-state{ text-align:center; padding:44px 20px; color:var(--muted); }
-.empty-state .ei{ font-size:36px; margin-bottom:12px; } .empty-state p{ font-size:13px; line-height:1.7; }
-::-webkit-scrollbar{ width:8px; height:8px; }
-::-webkit-scrollbar-thumb{ background:rgba(194,160,90,.3); border-radius:4px; }
-::-webkit-scrollbar-track{ background:transparent; }
-@media (max-width:600px){ header{ padding:0 14px; } main{ padding:16px 12px 80px; } .card{ padding:16px 14px; } nav{ top:66px; } .pipe-step{ min-width:48px; font-size:9px; padding:7px 2px; } .pipe-step .si{ font-size:12px; } .brand-name{ font-size:16px; } }
+/* Hidden native file input — accepts audio capture */
+#nativeAudioInput { display: none; }
+
+/* ── UPLOAD ── */
+.upload-zone {
+  border: 2px dashed var(--border); border-radius: var(--r);
+  padding: 24px 20px; text-align: center; cursor: pointer;
+  transition: all 0.2s; position: relative;
+}
+.upload-zone:hover, .upload-zone.over { border-color: var(--thistle); background: rgba(139,122,160,0.05); }
+.upload-zone input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+.upload-icon { font-size: 24px; margin-bottom: 6px; }
+.upload-title { font-size: 14px; font-weight: 500; color: var(--white); margin-bottom: 2px; }
+.upload-sub { font-size: 12px; color: var(--muted); }
+.file-pill {
+  display: flex; align-items: center; gap: 10px;
+  background: rgba(139,122,160,0.1); border: 1px solid var(--thistle);
+  border-radius: 8px; padding: 11px 14px; margin-top: 12px; font-size: 13px;
+}
+.file-pill-name { font-weight: 500; color: var(--white); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file-pill-size { color: var(--muted); font-size: 12px; flex-shrink: 0; }
+
+/* ── BUTTONS ── */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  gap: 6px; padding: 10px 18px; border-radius: 8px; font-size: 13px;
+  font-weight: 500; font-family: 'Inter', sans-serif; cursor: pointer;
+  border: none; transition: all 0.16s; letter-spacing: 0.02em;
+  white-space: nowrap; -webkit-tap-highlight-color: transparent;
+}
+.btn-primary { background: var(--thistle); color: var(--white); }
+.btn-primary:hover { background: var(--thistle2); }
+.btn-gold { background: linear-gradient(135deg, var(--gold), var(--gold2)); color: var(--ink); font-weight: 600; }
+.btn-gold:hover { filter: brightness(1.08); }
+.btn-ghost { background: var(--panel); color: var(--light); border: 1px solid var(--border); }
+.btn-ghost:hover { border-color: var(--thistle); color: var(--thistle2); }
+.btn-danger { background: var(--danger); color: var(--white); }
+.btn-sm  { padding: 7px 12px; font-size: 12px; border-radius: 6px; }
+.btn-xs  { padding: 4px 9px; font-size: 11px; border-radius: 5px; }
+.btn:disabled { opacity: 0.38; cursor: not-allowed; pointer-events: none; }
+
+/* ── FORM ── */
+.field { margin-bottom: 14px; }
+.field:last-child { margin-bottom: 0; }
+label.lbl { display: block; font-size: 11px; font-weight: 500; color: var(--muted); margin-bottom: 6px; letter-spacing: 0.06em; text-transform: uppercase; }
+input[type=text], input[type=date], input[type=password], textarea, select {
+  width: 100%; background: var(--panel); border: 1px solid var(--border);
+  border-radius: 7px; color: var(--light); font-family: 'Inter', sans-serif;
+  font-size: 14px; padding: 10px 13px; outline: none;
+  transition: border-color 0.18s; -webkit-appearance: none; appearance: none;
+}
+input:focus, textarea:focus, select:focus { border-color: var(--thistle); }
+textarea { resize: vertical; min-height: 80px; line-height: 1.65; }
+select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%236b6b72' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 12px center; padding-right: 32px;
+}
+select option { background: var(--panel); }
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width:520px) { .grid-2 { grid-template-columns: 1fr; } }
+
+/* ── ATTENDEES ── */
+.attendee-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
+.chip { display: inline-flex; align-items: center; gap: 6px; background: var(--panel); border: 1px solid var(--border); border-radius: 20px; padding: 5px 12px; font-size: 13px; color: var(--light); }
+.chip.gmac   { border-color: var(--thistle); color: var(--thistle2); background: rgba(139,122,160,0.12); }
+.chip.carlin { border-color: var(--gold);    color: var(--gold2);    background: rgba(200,169,110,0.10); }
+.chip-remove { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 14px; line-height: 1; padding: 0 0 0 2px; }
+.chip-remove:hover { color: var(--danger); }
+.add-row { display: flex; gap: 8px; align-items: center; }
+.add-row input { flex: 1; }
+
+/* ── KEY BAR ── */
+.key-bar { background: var(--panel); border: 1px solid var(--border); border-radius: var(--r); padding: 13px 16px; display: flex; align-items: center; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
+.key-bar label { font-size: 11px; color: var(--muted); white-space: nowrap; letter-spacing: 0.06em; text-transform: uppercase; }
+.key-bar input { flex: 1; min-width: 160px; font-family: 'JetBrains Mono', monospace; font-size: 12px; padding: 8px 11px; background: var(--surface); }
+.key-pill { font-size: 10px; padding: 3px 10px; border-radius: 20px; white-space: nowrap; }
+.key-set   { background: rgba(122,138,114,0.2); color: var(--rock2); }
+.key-unset { background: rgba(176,85,85,0.2);   color: #d4827a; }
+
+/* ── PIPELINE ── */
+.pipeline { display: flex; align-items: center; margin: 18px 0 10px; overflow-x: auto; padding-bottom: 2px; gap: 4px; }
+.pipe-step { flex: 1; min-width: 56px; text-align: center; padding: 9px 4px 7px; border-radius: 7px; font-size: 10px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); background: var(--panel); border: 1px solid var(--border); transition: all 0.25s; }
+.pipe-step .si { display: block; font-size: 14px; margin-bottom: 3px; }
+.pipe-step.active { color: var(--thistle2); border-color: var(--thistle); background: rgba(139,122,160,0.12); }
+.pipe-step.done   { color: var(--rock2);    border-color: var(--rock);    background: rgba(122,138,114,0.1); }
+.pipe-arr { color: var(--border); font-size: 12px; flex-shrink: 0; }
+
+.prog-wrap { height: 3px; background: var(--border); border-radius: 2px; overflow: hidden; margin-bottom: 10px; }
+.prog-fill { height: 100%; background: linear-gradient(90deg, var(--thistle), var(--gold)); border-radius: 2px; transition: width 0.5s ease; width: 0%; }
+
+/* ── STATUS ── */
+.status-bar { padding: 11px 14px; border-radius: 8px; font-size: 13px; margin-bottom: 12px; display: flex; align-items: center; gap: 10px; line-height: 1.4; }
+.s-info    { background: rgba(139,122,160,0.12); border: 1px solid rgba(139,122,160,0.25); color: var(--thistle2); }
+.s-success { background: rgba(122,138,114,0.12); border: 1px solid rgba(122,138,114,0.3);  color: var(--rock2); }
+.s-warn    { background: rgba(176,120,64,0.12);  border: 1px solid rgba(176,120,64,0.3);   color: #d4a06a; }
+.s-error   { background: rgba(176,85,85,0.12);   border: 1px solid rgba(176,85,85,0.3);    color: #d4827a; }
+
+@keyframes spin { to { transform: rotate(360deg); } }
+.spin { width: 15px; height: 15px; border: 2px solid var(--border); border-top-color: var(--thistle2); border-radius: 50%; animation: spin 0.7s linear infinite; flex-shrink: 0; }
+
+/* ── RESULTS ── */
+.result-block { background: var(--panel); border: 1px solid var(--border); border-radius: var(--r); margin-bottom: 12px; overflow: hidden; }
+.result-head { padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; cursor: pointer; user-select: none; }
+.result-head:hover { background: rgba(255,255,255,0.02); }
+.result-label  { font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--gold); display: flex; align-items: center; gap: 8px; }
+.result-toggle { font-size: 11px; color: var(--muted); }
+.result-body { padding: 0 16px; max-height: 0; overflow: hidden; transition: max-height 0.3s ease, padding 0.3s; }
+.result-body.open { padding: 14px 16px; max-height: 2000px; }
+
+.transcript-scroll { max-height: 340px; overflow-y: auto; background: var(--surface); border: 1px solid var(--border); border-radius: 7px; padding: 14px; }
+.utterance { margin-bottom: 14px; }
+.utterance:last-child { margin-bottom: 0; }
+.spk-label { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 3px; display: flex; align-items: center; gap: 6px; }
+.spk-gmac   { color: var(--thistle2); }
+.spk-carlin { color: var(--gold2); }
+.spk-other  { color: var(--mid); }
+.spk-text { font-size: 13px; line-height: 1.7; color: var(--light); }
+.spk-time { font-size: 10px; color: var(--muted); font-family: 'JetBrains Mono', monospace; }
+
+.action-list { list-style: none; }
+.action-item { display: flex; align-items: flex-start; gap: 11px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+.action-item:last-child { border-bottom: none; }
+.acheck { width: 17px; height: 17px; border: 2px solid var(--border); border-radius: 4px; flex-shrink: 0; cursor: pointer; display: flex; align-items: center; justify-content: center; margin-top: 2px; transition: all 0.15s; font-size: 10px; }
+.acheck:hover { border-color: var(--thistle); }
+.acheck.done { background: var(--rock); border-color: var(--rock); color: white; }
+.atext { flex: 1; font-size: 13px; line-height: 1.5; }
+.atext.struck { text-decoration: line-through; opacity: 0.5; }
+.abadge { font-size: 10px; padding: 2px 8px; border-radius: 20px; display: inline-block; margin-top: 4px; margin-right: 5px; }
+.ab-gmac   { background: rgba(139,122,160,0.2); color: var(--thistle2); }
+.ab-carlin { background: rgba(200,169,110,0.15); color: var(--gold2); }
+.ab-both   { background: rgba(122,138,114,0.2);  color: var(--rock2); }
+.ab-due    { background: var(--panel); color: var(--mid); border: 1px solid var(--border); }
+
+.meeting-card { background: var(--panel); border: 1px solid var(--border); border-radius: var(--r); padding: 15px 17px; margin-bottom: 9px; cursor: pointer; transition: border-color 0.18s; }
+.meeting-card:hover { border-color: var(--thistle); }
+.mc-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+.mc-title { font-size: 14px; font-weight: 500; color: var(--white); }
+.mc-date  { font-size: 11px; color: var(--muted); font-family: 'JetBrains Mono', monospace; flex-shrink: 0; }
+.mc-summary { font-size: 12px; color: var(--mid); margin-top: 5px; line-height: 1.5; }
+.mc-tags { display: flex; gap: 6px; margin-top: 9px; flex-wrap: wrap; }
+.tag      { font-size: 10px; padding: 2px 8px; border-radius: 20px; background: var(--surface); border: 1px solid var(--border); color: var(--muted); }
+.tag-open { border-color: var(--gold); color: var(--gold); }
+
+.divider { display: flex; align-items: center; gap: 12px; margin: 4px 0 16px; color: var(--muted); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; }
+.divider::before, .divider::after { content:''; flex:1; height:1px; background: var(--border); }
+
+.hidden  { display: none !important; }
+.flex    { display: flex; }
+.fw      { flex-wrap: wrap; }
+.gap-8   { gap: 8px; }
+.gap-12  { gap: 12px; }
+.mt-10   { margin-top: 10px; }
+.mt-16   { margin-top: 16px; }
+.small   { font-size: 12px; color: var(--muted); line-height: 1.5; }
+
+.empty-state { text-align: center; padding: 44px 20px; color: var(--muted); }
+.empty-state .ei { font-size: 36px; margin-bottom: 12px; }
+.empty-state p { font-size: 13px; line-height: 1.7; }
+
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+@media (max-width: 600px) {
+  header { padding: 0 14px; }
+  main { padding: 16px 12px 80px; }
+  .card { padding: 16px 14px; }
+  .pipeline { gap: 2px; }
+  .pipe-step { min-width: 48px; font-size: 9px; padding: 7px 2px; }
+  .pipe-step .si { font-size: 12px; }
+}
 </style>
 </head>
 <body>
 
 <header>
   <div class="brand">
-    <img src="tr_emblem.png" alt="Thistle Rock Properties" class="brand-emblem" />
+    <div class="brand-mark">🌿</div>
     <div>
       <div class="brand-name">Thistle Rock</div>
-      <div class="brand-sub">Meeting Intelligence</div>
+      <div class="brand-sub">Meeting Intelligence · v3.0</div>
     </div>
   </div>
   <button class="btn btn-ghost btn-sm" onclick="exportAll()">⬇ Export</button>
@@ -223,22 +296,26 @@ select option{ background:var(--panel-2); }
 
 <main>
 
-<!-- ===== NEW MEETING ===== -->
+<!-- ══════════ TAB: NEW MEETING ══════════ -->
 <div id="tab-new">
 
-  <div class="key-bar">
-    <label>Access Code</label>
-    <input type="password" id="keyInput" placeholder="Optional — only if your Worker has one set…" oninput="onKeyInput()" />
+  <div id="recoveryBar"></div>
+
+  <div class="key-bar" id="keyBar">
+    <label>AssemblyAI Key</label>
+    <input type="password" id="keyInput" placeholder="Paste your AssemblyAI key…" oninput="onKeyInput()" />
     <span class="key-pill" id="keyPill">Not set</span>
   </div>
-
-  <div id="proxyWarn" class="status-bar s-warn hidden">⚠ No Worker URL set yet. Open <strong>Settings</strong> and paste your Cloudflare Worker URL before processing a meeting.</div>
 
   <div class="card">
     <div class="card-title">Meeting Details</div>
     <div class="grid-2">
-      <div class="field"><label class="lbl">Date</label><input type="date" id="mDate" /></div>
-      <div class="field"><label class="lbl">Meeting Type</label>
+      <div class="field">
+        <label class="lbl">Date</label>
+        <input type="date" id="mDate" />
+      </div>
+      <div class="field">
+        <label class="lbl">Meeting Type</label>
         <select id="mType">
           <option>Weekly Partner Strategy</option>
           <option>Property Review</option>
@@ -248,16 +325,10 @@ select option{ background:var(--panel-2); }
         </select>
       </div>
     </div>
-    <div class="field"><label class="lbl">Title / Focus (optional)</label>
-      <input type="text" id="mTitle" placeholder="e.g. 4220 Centre Street closing, Q3 pipeline…" /></div>
-    <div class="field"><label class="lbl">Expected speakers (helps separate voices)</label>
-      <select id="mSpeakers">
-        <option value="2">2 people</option>
-        <option value="3">3 people</option>
-        <option value="4">4 people</option>
-        <option value="5">5 people</option>
-        <option value="0">Auto-detect</option>
-      </select></div>
+    <div class="field">
+      <label class="lbl">Title / Focus (optional)</label>
+      <input type="text" id="mTitle" placeholder="e.g. Shawnessy acquisition, Q3 pipeline…" />
+    </div>
   </div>
 
   <div class="card">
@@ -269,14 +340,19 @@ select option{ background:var(--panel-2); }
     </div>
   </div>
 
+  <!-- NATIVE RECORD CARD -->
   <div class="card">
     <div class="card-title">Record Meeting</div>
     <div class="record-zone">
-      <button class="record-btn" id="recBtn" onclick="toggleRecord()" title="Record">🎙</button>
-      <div class="record-label" id="recLabel">Tap to start recording</div>
-      <div class="record-timer hidden" id="recTimer">00:00</div>
-      <div class="record-hint">Records straight in your browser using your microphone — tap once to start, tap again to stop, then <strong>Process Meeting</strong>. Your browser will ask permission to use the mic the first time. (Recording only works on the live web address, not a file opened from your computer.)</div>
+      <button class="record-btn" onclick="triggerNativeRecord()" title="Record meeting">🎙</button>
+      <div class="record-label">Tap to record your meeting</div>
+      <div class="record-hint">
+        Opens your phone's native recorder — your phone keeps its own copy too.<br>
+        Record → tap Stop → the file loads, processes, and saves automatically.
+      </div>
     </div>
+    <!-- Hidden input that triggers native audio capture -->
+    <input type="file" id="nativeAudioInput" accept="audio/*" capture="microphone" onchange="onNativeAudio(event)" />
   </div>
 
   <div id="filePillWrap" class="hidden" style="margin-bottom:14px;">
@@ -294,7 +370,7 @@ select option{ background:var(--panel-2); }
   <div class="card">
     <div class="card-title">Upload Audio File</div>
     <div class="upload-zone" id="dropZone">
-      <input type="file" id="audioInput" accept="audio/*,.m4a,.mp3,.wav,.ogg,.aac,.mp4,.webm" onchange="onFileChange(event)" />
+      <input type="file" id="audioInput" accept="audio/*,.m4a,.mp3,.wav,.ogg,.aac,.mp4" onchange="onFileChange(event)" />
       <div class="upload-icon">📁</div>
       <div class="upload-title">Drop file here or tap to browse</div>
       <div class="upload-sub">.m4a · .mp3 · .wav · .aac from Voice Memos or OneDrive</div>
@@ -316,10 +392,14 @@ select option{ background:var(--panel-2); }
   </div>
 
   <div class="pipeline">
-    <div class="pipe-step" id="ps-upload"><span class="si">📁</span>Audio</div><div class="pipe-arr">›</div>
-    <div class="pipe-step" id="ps-transcribe"><span class="si">✍️</span>Transcribe</div><div class="pipe-arr">›</div>
-    <div class="pipe-step" id="ps-speakers"><span class="si">🎤</span>Speakers</div><div class="pipe-arr">›</div>
-    <div class="pipe-step" id="ps-analyse"><span class="si">🧠</span>Analyse</div><div class="pipe-arr">›</div>
+    <div class="pipe-step" id="ps-upload"><span class="si">📁</span>Audio</div>
+    <div class="pipe-arr">›</div>
+    <div class="pipe-step" id="ps-transcribe"><span class="si">✍️</span>Transcribe</div>
+    <div class="pipe-arr">›</div>
+    <div class="pipe-step" id="ps-speakers"><span class="si">🎤</span>Speakers</div>
+    <div class="pipe-arr">›</div>
+    <div class="pipe-step" id="ps-analyse"><span class="si">🧠</span>Analyse</div>
+    <div class="pipe-arr">›</div>
     <div class="pipe-step" id="ps-done"><span class="si">✅</span>Done</div>
   </div>
   <div class="prog-wrap hidden" id="progWrap"><div class="prog-fill" id="progFill"></div></div>
@@ -328,36 +408,64 @@ select option{ background:var(--panel-2); }
   <div id="resultsWrap" class="hidden" style="margin-top:22px;">
     <div class="card-title" style="margin-bottom:12px;">Meeting Record</div>
 
-    <div class="card hidden" id="speakerCard">
-      <div class="card-title">Speakers — Edit Names</div>
-      <div class="small" style="margin-bottom:12px;">The system detects each distinct voice (A, B, C, D…). Rename anyone here — including guests or a different person than expected — then tap Apply and the transcript updates. Handles however many voices were detected.</div>
-      <div id="speakerEditor"></div>
-      <button class="btn btn-ghost btn-sm mt-10" onclick="applySpeakerNames()">Apply names</button>
+    <div class="result-block">
+      <div class="result-head" onclick="toggleResult('rb-transcript')">
+        <div class="result-label">🎙 Transcript — Speaker Labels</div>
+        <div class="result-toggle" id="rtb-transcript">▾ expand</div>
+      </div>
+      <div class="result-body" id="rb-transcript">
+        <div class="transcript-scroll" id="transcriptOut"></div>
+      </div>
     </div>
 
     <div class="result-block">
-      <div class="result-head" onclick="toggleResult('rb-transcript')"><div class="result-label">🎙 Transcript — Speaker Labels</div><div class="result-toggle" id="rtb-transcript">▾ expand</div></div>
-      <div class="result-body" id="rb-transcript"><div class="transcript-scroll" id="transcriptOut"></div></div>
+      <div class="result-head" onclick="toggleResult('rb-summary')">
+        <div class="result-label">📋 Executive Summary</div>
+        <div class="result-toggle" id="rtb-summary">▾ expand</div>
+      </div>
+      <div class="result-body open" id="rb-summary">
+        <div id="summaryOut" style="font-size:14px;line-height:1.7;color:var(--light);"></div>
+      </div>
     </div>
+
     <div class="result-block">
-      <div class="result-head" onclick="toggleResult('rb-summary')"><div class="result-label">📋 Executive Summary</div><div class="result-toggle" id="rtb-summary">▾ expand</div></div>
-      <div class="result-body open" id="rb-summary"><div id="summaryOut" style="font-size:14px;line-height:1.7;"></div></div>
+      <div class="result-head" onclick="toggleResult('rb-decisions')">
+        <div class="result-label">🏛 Decisions Made</div>
+        <div class="result-toggle" id="rtb-decisions">▾ expand</div>
+      </div>
+      <div class="result-body open" id="rb-decisions">
+        <div id="decisionsOut"></div>
+      </div>
     </div>
+
     <div class="result-block">
-      <div class="result-head" onclick="toggleResult('rb-decisions')"><div class="result-label">🏛 Decisions Made</div><div class="result-toggle" id="rtb-decisions">▾ expand</div></div>
-      <div class="result-body open" id="rb-decisions"><div id="decisionsOut"></div></div>
+      <div class="result-head" onclick="toggleResult('rb-actions')">
+        <div class="result-label">✅ Action Items</div>
+        <div class="result-toggle" id="rtb-actions">▾ expand</div>
+      </div>
+      <div class="result-body open" id="rb-actions">
+        <ul class="action-list" id="actionsOut"></ul>
+      </div>
     </div>
+
     <div class="result-block">
-      <div class="result-head" onclick="toggleResult('rb-actions')"><div class="result-label">✅ Action Items</div><div class="result-toggle" id="rtb-actions">▾ expand</div></div>
-      <div class="result-body open" id="rb-actions"><ul class="action-list" id="actionsOut"></ul></div>
+      <div class="result-head" onclick="toggleResult('rb-props')">
+        <div class="result-label">🏠 Properties &amp; Projects</div>
+        <div class="result-toggle" id="rtb-props">▾ expand</div>
+      </div>
+      <div class="result-body" id="rb-props">
+        <div id="propsOut"></div>
+      </div>
     </div>
+
     <div class="result-block">
-      <div class="result-head" onclick="toggleResult('rb-props')"><div class="result-label">🏠 Properties &amp; Projects</div><div class="result-toggle" id="rtb-props">▾ expand</div></div>
-      <div class="result-body" id="rb-props"><div id="propsOut"></div></div>
-    </div>
-    <div class="result-block">
-      <div class="result-head" onclick="toggleResult('rb-quotes')"><div class="result-label">💬 Notable Quotes</div><div class="result-toggle" id="rtb-quotes">▾ expand</div></div>
-      <div class="result-body" id="rb-quotes"><div id="quotesOut"></div></div>
+      <div class="result-head" onclick="toggleResult('rb-quotes')">
+        <div class="result-label">💬 Notable Quotes</div>
+        <div class="result-toggle" id="rtb-quotes">▾ expand</div>
+      </div>
+      <div class="result-body" id="rb-quotes">
+        <div id="quotesOut"></div>
+      </div>
     </div>
 
     <div class="flex gap-12 mt-16 fw">
@@ -366,32 +474,43 @@ select option{ background:var(--panel-2); }
       <button class="btn btn-ghost btn-sm" onclick="resetAll()">↺ New Meeting</button>
     </div>
   </div>
-</div>
 
-<!-- ===== LOG ===== -->
+</div><!-- /tab-new -->
+
+<!-- ══════════ TAB: LOG ══════════ -->
 <div id="tab-log" class="hidden">
-  <div class="card"><div class="card-title">All Meetings</div>
+  <div class="card">
+    <div class="card-title">All Meetings</div>
+    <div class="small" id="syncStatus" style="margin-bottom:10px;"></div>
     <div id="logList"><div class="empty-state"><div class="ei">📁</div><p>No meetings saved yet.</p></div></div>
   </div>
 </div>
 
-<!-- ===== ACTIONS ===== -->
+<!-- ══════════ TAB: ACTIONS ══════════ -->
 <div id="tab-actions" class="hidden">
-  <div class="card"><div class="card-title">Open Action Items — All Meetings</div>
+  <div class="card">
+    <div class="card-title">Open Action Items — All Meetings</div>
     <div id="globalActions"><div class="empty-state"><div class="ei">✅</div><p>All clear — no open actions.</p></div></div>
   </div>
 </div>
 
-<!-- ===== SETTINGS ===== -->
+<!-- ══════════ TAB: SETTINGS ══════════ -->
 <div id="tab-settings" class="hidden">
   <div class="card">
-    <div class="card-title">Connection</div>
-    <div class="field"><label class="lbl">Worker / Proxy URL</label>
-      <input type="text" id="sProxy" placeholder="https://thistle-rock-proxy.YOURNAME.workers.dev" oninput="onProxyInput()" /></div>
-    <div class="field"><label class="lbl">Access Code (optional)</label>
-      <input type="password" id="settingsKey" placeholder="Only if you set ACCESS_TOKEN on the Worker" oninput="onSettingsKey()" /></div>
-    <div class="small">Your AssemblyAI and Claude keys live <strong style="color:var(--gold-bright)">on the Cloudflare Worker</strong>, not in this page. Paste your Worker URL once and it's remembered on this device.</div>
-    <div class="small" style="margin-top:10px;opacity:.7;">Build <strong style="color:var(--gold-bright)">2026-06-23d · quota-fix</strong> — iPhone storage-quota fix; reads now work in memory.</div>
+    <div class="card-title">Team Sync — Cloudflare Worker</div>
+    <div class="field">
+      <label class="lbl">Worker URL</label>
+      <input type="text" id="sProxy" placeholder="https://thistle-rock-proxy.YOURNAME.workers.dev" oninput="saveProxy()" />
+    </div>
+    <div class="small">Recommended. With a Worker URL set, meetings save to the <strong style="color:var(--thistle2)">shared team log</strong> (visible to everyone) and no API key is needed on this device.</div>
+  </div>
+  <div class="card">
+    <div class="card-title">AssemblyAI API Key (fallback)</div>
+    <div class="field">
+      <label class="lbl">API Key</label>
+      <input type="password" id="settingsKey" placeholder="Paste your AssemblyAI key…" oninput="onSettingsKey()" />
+    </div>
+    <div class="small">Only used when no Worker URL is set. Get a key at <strong style="color:var(--thistle2)">app.assemblyai.com</strong> → API Keys.</div>
   </div>
   <div class="card">
     <div class="card-title">Company Profile</div>
@@ -401,65 +520,154 @@ select option{ background:var(--panel-2); }
   </div>
   <div class="card">
     <div class="card-title">Speaker Name Mapping</div>
-    <div class="small" style="margin-bottom:12px;">AssemblyAI labels speakers A, B, C… Map them to real names. (Whoever speaks most words is mapped to Speaker A.)</div>
+    <div class="small" style="margin-bottom:12px;">AssemblyAI labels speakers A, B, C… Map them to real names.</div>
     <div class="field"><label class="lbl">Speaker A (most words)</label><input type="text" id="spkA" value="GMac" oninput="saveSettings()" /></div>
     <div class="field"><label class="lbl">Speaker B</label><input type="text" id="spkB" value="Carlin" oninput="saveSettings()" /></div>
     <div class="field"><label class="lbl">Speaker C</label><input type="text" id="spkC" value="Guest" oninput="saveSettings()" /></div>
   </div>
   <div class="card">
     <div class="card-title">Data</div>
-    <div class="small" style="margin-bottom:12px;">Export regularly as a backup. Import restores a saved JSON, or brings meetings onto another device.</div>
     <div class="flex gap-12 fw">
       <button class="btn btn-ghost btn-sm" onclick="exportAll()">⬇ Export All Meetings</button>
-      <button class="btn btn-ghost btn-sm" onclick="document.getElementById('importInput').click()">⬆ Import Meetings</button>
       <button class="btn btn-danger btn-sm" onclick="nukeData()">🗑 Clear Everything</button>
     </div>
-    <input type="file" id="importInput" accept=".json,application/json" style="display:none" onchange="importMeetings(event)" />
   </div>
 </div>
 
 </main>
 
 <script>
-const STORE='tr2_meetings', SKEY='tr2_settings', KKEY='tr2_access', PKEY='tr2_proxy';
+const STORE='tr2_meetings', SKEY='tr2_settings', KKEY='tr2_aai_key', PKEY='tr2_proxy';
+const APP_VERSION='3.0';
 let currentMeeting=null, selectedFile=null, attendees=['GMac','Carlin'];
-let mediaRecorder=null, recChunks=[], recStream=null, recTimerInt=null, recStart=0;
+let processing=false, lastSavedId=null;
+var MEM=null, lastSync='';
+
+/* ══════════ SAFEGUARD: IndexedDB persistence layer ══════════ */
+const IDB={db:null,
+  open(){ return new Promise((res,rej)=>{
+    const q=indexedDB.open('tr_meet_safety',1);
+    q.onupgradeneeded=e=>{ const d=e.target.result;
+      if(!d.objectStoreNames.contains('audio'))   d.createObjectStore('audio');
+      if(!d.objectStoreNames.contains('meeting')) d.createObjectStore('meeting'); };
+    q.onsuccess=e=>{ IDB.db=e.target.result; res(IDB.db); };
+    q.onerror=()=>rej(q.error); }); },
+  async put(store,key,val){ if(!IDB.db) await IDB.open();
+    return new Promise((res,rej)=>{ const t=IDB.db.transaction(store,'readwrite');
+      t.objectStore(store).put(val,key); t.oncomplete=()=>res(true); t.onerror=()=>rej(t.error); }); },
+  async get(store,key){ if(!IDB.db) await IDB.open();
+    return new Promise((res,rej)=>{ const t=IDB.db.transaction(store,'readonly');
+      const q=t.objectStore(store).get(key); q.onsuccess=()=>res(q.result); q.onerror=()=>rej(q.error); }); },
+  async del(store,key){ if(!IDB.db) await IDB.open();
+    return new Promise((res,rej)=>{ const t=IDB.db.transaction(store,'readwrite');
+      t.objectStore(store).delete(key); t.oncomplete=()=>res(true); t.onerror=()=>rej(t.error); }); }
+};
+async function persistAudio(f){
+  try{ await IDB.put('audio','pending',{blob:f,name:f.name,type:f.type,when:new Date().toISOString()}); }
+  catch(e){ console.warn('Audio safety copy failed:',e); }
+}
+async function persistDraft(m){
+  try{ await IDB.put('meeting','unsaved',m); }catch(e){ console.warn('Draft safety copy failed:',e); }
+}
+async function clearSafety(){
+  try{ await IDB.del('meeting','unsaved'); }catch(e){}
+  try{ await IDB.del('audio','pending'); }catch(e){}
+}
+
+/* ══════════ SAFEGUARD: recovery banner on load ══════════ */
+function showRecovery(html){ const el=document.getElementById('recoveryBar'); if(el) el.innerHTML=html; }
+async function checkRecovery(){
+  try{
+    const m=await IDB.get('meeting','unsaved');
+    if(m&&m.id){
+      window.__recMeeting=m;
+      showRecovery('<div class="status-bar s-warn" style="flex-wrap:wrap;">⚠ Recovered an unsaved meeting from '+fmtDate(m.date)+' — "'+(m.title||m.type||'Untitled')+'".&nbsp;<button class="btn btn-gold btn-sm" onclick="restoreMeeting()">Restore &amp; Save</button>&nbsp;<button class="btn btn-ghost btn-sm" onclick="discardRecovery(\'meeting\')">Discard</button></div>');
+      return;
+    }
+    const a=await IDB.get('audio','pending');
+    if(a&&a.blob&&a.blob.size>0){
+      window.__recAudio=a;
+      showRecovery('<div class="status-bar s-warn" style="flex-wrap:wrap;">⚠ Found a recording from '+new Date(a.when).toLocaleString()+' ('+(a.blob.size/1024/1024).toFixed(1)+' MB) that was never processed.&nbsp;<button class="btn btn-gold btn-sm" onclick="recoverAudio()">Process Now</button>&nbsp;<button class="btn btn-ghost btn-sm" onclick="downloadRecovered()">Download Audio</button>&nbsp;<button class="btn btn-ghost btn-sm" onclick="discardRecovery(\'audio\')">Discard</button></div>');
+    }
+  }catch(e){ console.warn('Recovery check failed:',e); }
+}
+function restoreMeeting(){
+  const m=window.__recMeeting; if(!m) return;
+  currentMeeting=m; renderResults(m);
+  document.getElementById('resultsWrap').classList.remove('hidden');
+  showRecovery(''); saveMeeting(true);
+}
+function recoverAudio(){
+  const a=window.__recAudio; if(!a) return;
+  selectedFile=new File([a.blob],a.name||'recovered-recording.m4a',{type:a.type||'audio/mp4'});
+  document.getElementById('fName').textContent=selectedFile.name;
+  document.getElementById('fSize').textContent=(selectedFile.size/1024/1024).toFixed(1)+' MB';
+  document.getElementById('filePillWrap').classList.remove('hidden');
+  showRecovery(''); runPipeline();
+}
+function downloadRecovered(){
+  const a=window.__recAudio; if(!a) return;
+  const el=document.createElement('a');
+  el.href=URL.createObjectURL(a.blob);
+  el.download=(a.name&&a.name.includes('.'))?a.name:('TR_recovered_audio_'+(a.when||'').split('T')[0]+'.m4a');
+  el.click();
+}
+async function discardRecovery(kind){
+  if(!confirm('Discard this permanently? If it is your only copy it cannot be recovered.')) return;
+  try{ await IDB.del(kind==='audio'?'audio':'meeting', kind==='audio'?'pending':'unsaved'); }catch(e){}
+  showRecovery('');
+}
+
+/* ══════════ SAFEGUARD: leave-page warning while unsaved ══════════ */
+function isDirty(){
+  return processing || (selectedFile&&!currentMeeting) || (currentMeeting&&currentMeeting.id!==lastSavedId);
+}
+window.addEventListener('beforeunload',function(e){
+  if(isDirty()){ e.preventDefault(); e.returnValue='You have an unsaved meeting — leave anyway?'; return e.returnValue; }
+});
 
 function boot() {
   document.getElementById('mDate').value = today();
-  const acc = ls(KKEY);
-  if (acc) { document.getElementById('keyInput').value=acc; document.getElementById('settingsKey').value=acc; setKeyPill(true); }
+  const key = ls(KKEY);
+  if (key) { document.getElementById('keyInput').value=key; document.getElementById('settingsKey').value=key; }
   const proxy = ls(PKEY);
   if (proxy) document.getElementById('sProxy').value = proxy;
+  refreshKeyPill();
   const s = lsj(SKEY)||{};
-  if (s.company)  document.getElementById('sCompany').value = s.company;
-  if (s.partners) document.getElementById('sPartners').value = s.partners;
-  if (s.context)  document.getElementById('sContext').value = s.context;
-  if (s.spkA) document.getElementById('spkA').value = s.spkA;
-  if (s.spkB) document.getElementById('spkB').value = s.spkB;
-  if (s.spkC) document.getElementById('spkC').value = s.spkC;
+  if (s.company)   document.getElementById('sCompany').value  = s.company;
+  if (s.partners)  document.getElementById('sPartners').value = s.partners;
+  if (s.context)   document.getElementById('sContext').value  = s.context;
+  if (s.spkA)      document.getElementById('spkA').value      = s.spkA;
+  if (s.spkB)      document.getElementById('spkB').value      = s.spkB;
+  if (s.spkC)      document.getElementById('spkC').value      = s.spkC;
   if (s.attendees) attendees = s.attendees;
-  renderChips(); refreshProxyWarn(); pullMeetings();
+  renderChips();
   const dz = document.getElementById('dropZone');
-  dz.addEventListener('dragover', e=>{e.preventDefault();dz.classList.add('over');});
+  dz.addEventListener('dragover',  e=>{e.preventDefault();dz.classList.add('over');});
   dz.addEventListener('dragleave', ()=>dz.classList.remove('over'));
   dz.addEventListener('drop', e=>{e.preventDefault();dz.classList.remove('over');const f=e.dataTransfer.files[0];if(f)setUploadFile(f);});
+  checkRecovery();
+  pullMeetings();
 }
+
 function showTab(t) {
   ['new','log','actions','settings'].forEach(x=>document.getElementById('tab-'+x).classList.toggle('hidden',x!==t));
   document.querySelectorAll('nav button').forEach((b,i)=>b.classList.toggle('active',['new','log','actions','settings'][i]===t));
   if(t==='log') loadLog();
   if(t==='actions') loadActions();
-  if(t==='new') refreshProxyWarn();
 }
-function onKeyInput()    { const v=document.getElementById('keyInput').value.trim();    lss(KKEY,v); document.getElementById('settingsKey').value=v; setKeyPill(v.length>0); }
-function onSettingsKey() { const v=document.getElementById('settingsKey').value.trim(); lss(KKEY,v); document.getElementById('keyInput').value=v;    setKeyPill(v.length>0); }
-function onProxyInput()  { lss(PKEY, document.getElementById('sProxy').value.trim()); refreshProxyWarn(); }
-function setKeyPill(ok)  { const el=document.getElementById('keyPill'); el.textContent=ok?'✓ Code saved':'Not set'; el.className='key-pill '+(ok?'key-set':'key-unset'); }
-function getAccess()     { return ls(KKEY)||''; }
-function getProxy()      { return (ls(PKEY)||'').replace(/\/+$/,''); }
-function pHeaders(asJson){ const h={}; if(asJson) h['content-type']='application/json'; const a=getAccess(); if(a) h['x-access-token']=a; return h; }
-function refreshProxyWarn(){ const w=document.getElementById('proxyWarn'); if(w) w.classList.toggle('hidden', !!getProxy()); }
+
+function onKeyInput()    { const v=document.getElementById('keyInput').value.trim();    lss(KKEY,v); document.getElementById('settingsKey').value=v; refreshKeyPill(); }
+function onSettingsKey() { const v=document.getElementById('settingsKey').value.trim(); lss(KKEY,v); document.getElementById('keyInput').value=v;    refreshKeyPill(); }
+function saveProxy()     { const v=document.getElementById('sProxy').value.trim(); lss(PKEY,v); refreshKeyPill(); }
+function refreshKeyPill(){
+  const el=document.getElementById('keyPill');
+  if(getProxy()){ el.textContent='✓ Team mode'; el.className='key-pill key-set'; document.getElementById('keyBar').style.display='none'; }
+  else { document.getElementById('keyBar').style.display=''; const ok=(getKey()||'').length>10; el.textContent=ok?'✓ Key saved':'Not set'; el.className='key-pill '+(ok?'key-set':'key-unset'); }
+}
+function getKey()   { return ls(KKEY)||''; }
+function getProxy() { return (ls(PKEY)||'').trim().replace(/\/+$/,''); }
+
 function renderChips() {
   document.getElementById('attendeeChips').innerHTML = attendees.map((a,i)=>{
     const cls=/gmac|graham/i.test(a)?'gmac':/carlin/i.test(a)?'carlin':'';
@@ -468,307 +676,346 @@ function renderChips() {
 }
 function addAttendee() { const inp=document.getElementById('newAttendee'),v=inp.value.trim(); if(!v)return; attendees.push(v); inp.value=''; renderChips(); saveSettings(); }
 function removeAttendee(i) { attendees.splice(i,1); renderChips(); saveSettings(); }
-async function toggleRecord() {
-  if (mediaRecorder && mediaRecorder.state === 'recording') { stopRecording(); return; }
-  if (!getProxy()) { showStatus('⚠ Set your Worker URL in Settings first.','warn'); return; }
-  if (!navigator.mediaDevices || !window.MediaRecorder) {
-    showStatus('⚠ Recording needs the live web address (https). Open the github.io link, not a local file — or use Upload.','error'); return;
-  }
-  try { recStream = await navigator.mediaDevices.getUserMedia({ audio:true }); }
-  catch(e){ showStatus('⚠ Microphone blocked: '+e.message+'. Allow mic access, or use Upload.','error'); return; }
-  recChunks = [];
-  mediaRecorder = new MediaRecorder(recStream);
-  mediaRecorder.ondataavailable = e => { if (e.data && e.data.size>0) recChunks.push(e.data); };
-  mediaRecorder.onstop = () => {
-    const type = (recChunks[0] && recChunks[0].type) || 'audio/webm';
-    const blob = new Blob(recChunks, { type });
-    const ext = type.includes('mp4') ? 'm4a' : (type.includes('ogg') ? 'ogg' : 'webm');
-    selectedFile = new File([blob], 'meeting-recording.'+ext, { type });
-    if (recStream) { recStream.getTracks().forEach(t=>t.stop()); recStream=null; }
-    document.getElementById('fName').textContent = selectedFile.name;
-    document.getElementById('fSize').textContent = (selectedFile.size/1024/1024).toFixed(1)+' MB';
-    document.getElementById('filePillWrap').classList.remove('hidden');
-    showStatus('✓ Recording captured ('+fmtTimer(Date.now()-recStart)+'). Tap “Process Meeting”.','success');
-  };
-  mediaRecorder.start();
-  recStart = Date.now();
-  document.getElementById('recBtn').classList.add('recording');
-  document.getElementById('recLabel').textContent = 'Recording… tap to stop';
-  const tEl = document.getElementById('recTimer'); tEl.classList.remove('hidden');
-  recTimerInt = setInterval(()=>{ tEl.textContent = fmtTimer(Date.now()-recStart); }, 500);
+
+// ── NATIVE RECORD (iOS/Android-friendly; the phone's recorder keeps its own copy) ──
+function triggerNativeRecord() {
+  document.getElementById('nativeAudioInput').click();
 }
-function stopRecording() {
-  if (mediaRecorder && mediaRecorder.state==='recording') mediaRecorder.stop();
-  clearInterval(recTimerInt);
-  document.getElementById('recBtn').classList.remove('recording');
-  document.getElementById('recLabel').textContent = 'Tap to start recording';
+async function onNativeAudio(e) {
+  const f = e.target.files[0]; if (!f) return;
+  selectedFile = f;
+  document.getElementById('fName').textContent = f.name;
+  document.getElementById('fSize').textContent = (f.size/1024/1024).toFixed(1)+' MB';
+  document.getElementById('filePillWrap').classList.remove('hidden');
+  await persistAudio(f);                    // SAFEGUARD: safety copy before anything else
+  if(!getProxy()&&!getKey()){ showStatus('✓ Recording saved safely on this device. Set the Worker URL (or an AssemblyAI key) in Settings, then tap “Process Meeting”.','warn'); return; }
+  runPipeline();                            // SAFEGUARD: auto-process
 }
-function fmtTimer(ms){ const s=Math.floor(ms/1000); return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0'); }
+
+// ── UPLOAD FILE ──
 function onFileChange(e) { if(e.target.files[0]) setUploadFile(e.target.files[0]); }
-function setUploadFile(f) {
+async function setUploadFile(f) {
   selectedFile=f;
   document.getElementById('ufName').textContent=f.name;
   document.getElementById('ufSize').textContent=(f.size/1024/1024).toFixed(1)+' MB';
   document.getElementById('uploadFilePill').classList.remove('hidden');
   document.getElementById('dropZone').style.opacity='0.5';
+  await persistAudio(f);                    // SAFEGUARD: safety copy of uploads too
 }
-function clearAudio() { selectedFile=null; document.getElementById('filePillWrap').classList.add('hidden'); }
+function clearAudio() {
+  selectedFile=null; document.getElementById('nativeAudioInput').value='';
+  document.getElementById('filePillWrap').classList.add('hidden');
+}
 function clearUpload() {
   selectedFile=null; document.getElementById('audioInput').value='';
   document.getElementById('uploadFilePill').classList.add('hidden');
   document.getElementById('dropZone').style.opacity='1';
 }
+
 function saveSettings() {
   lssj(SKEY,{ company:document.getElementById('sCompany').value, partners:document.getElementById('sPartners').value, context:document.getElementById('sContext').value, spkA:document.getElementById('spkA').value, spkB:document.getElementById('spkB').value, spkC:document.getElementById('spkC').value, attendees });
 }
+
+// ── PIPELINE ──
 const STEPS=['upload','transcribe','speakers','analyse','done'];
-function setStep(s){ STEPS.forEach(x=>{ const el=document.getElementById('ps-'+x),i=STEPS.indexOf(x),c=STEPS.indexOf(s); el.className=x===s?'pipe-step active':i<c?'pipe-step done':'pipe-step'; }); }
-function setProgress(p){ document.getElementById('progWrap').classList.remove('hidden'); document.getElementById('progFill').style.width=p+'%'; }
-function showStatus(html,type='info'){ const el=document.getElementById('statusEl'); el.className='status-bar s-'+type; el.innerHTML=html; el.classList.remove('hidden'); }
+function setStep(s) { STEPS.forEach(x=>{ const el=document.getElementById('ps-'+x),i=STEPS.indexOf(x),c=STEPS.indexOf(s); el.className=x===s?'pipe-step active':i<c?'pipe-step done':'pipe-step'; }); }
+function setProgress(p) { document.getElementById('progWrap').classList.remove('hidden'); document.getElementById('progFill').style.width=p+'%'; }
+function showStatus(html,type='info') { const el=document.getElementById('statusEl'); el.className='status-bar s-'+type; el.innerHTML=html; el.classList.remove('hidden'); }
+
 async function runPipeline() {
-  const proxy=getProxy();
-  if(!proxy){ showStatus('⚠ Set your Worker URL in Settings first.','warn'); return; }
-  if(!selectedFile){ showStatus('⚠ No audio selected.','warn'); return; }
+  if(!getProxy()&&!getKey()){ showStatus('⚠ Set the Worker URL (Settings → Team Sync) or paste an AssemblyAI key first. Your recording is safe on this device meanwhile.','warn'); return; }
+  if(!selectedFile){ showStatus('⚠ No audio file selected.','warn'); return; }
+
+  processing=true;
   document.getElementById('processBtn').disabled=true;
   document.getElementById('uploadBtn').disabled=true;
   document.getElementById('resultsWrap').classList.add('hidden');
+
   setStep('upload'); setProgress(8);
   showStatus('<div class="spin"></div>&nbsp; Uploading…','info');
   let uploadUrl;
   try { uploadUrl=await aaiUpload(selectedFile); }
-  catch(e){ showStatus('✗ Upload failed: '+e.message,'error'); resetBtns(); return; }
+  catch(e){ showStatus('✗ Upload failed: '+e.message+' — your recording is still saved safely on this device. Check your connection and tap “Process Meeting” to retry.','error'); resetBtns(); return; }
+
   setStep('transcribe'); setProgress(18);
   showStatus('<div class="spin"></div>&nbsp; Transcribing with speaker detection…','info');
   let jobId;
   try { jobId=await aaiSubmit(uploadUrl); }
-  catch(e){ showStatus('✗ Submit failed: '+e.message,'error'); resetBtns(); return; }
+  catch(e){ showStatus('✗ Submit failed: '+e.message+' — recording still safe on this device. Tap “Process Meeting” to retry.','error'); resetBtns(); return; }
+
   showStatus('<div class="spin"></div>&nbsp; Processing… (~1–3 min for a typical meeting)','info');
   let result;
   try { result=await aaiPoll(jobId,p=>setProgress(18+p*52)); }
-  catch(e){ showStatus('✗ '+e.message,'error'); resetBtns(); return; }
+  catch(e){ showStatus('✗ '+e.message+' — recording still safe on this device. Tap “Process Meeting” to retry.','error'); resetBtns(); return; }
+
   setStep('speakers'); setProgress(72);
   showStatus('<div class="spin"></div>&nbsp; Mapping speaker labels…','info');
   const s=lsj(SKEY)||{};
   const spkMap=buildSpeakerMap(result.utterances||[],s);
   const utterances=(result.utterances||[]).map(u=>({...u,speakerName:spkMap[u.speaker]||u.speaker}));
+  const rawTranscript=utterances.map(u=>`[${u.speakerName}]: ${u.text}`).join('\n');
+
+  // SAFEGUARD: checkpoint the transcript BEFORE analysis — if anything dies from here on,
+  // the full transcript is recoverable from this device.
+  await persistDraft({
+    id:Date.now().toString(), date:document.getElementById('mDate').value,
+    type:document.getElementById('mType').value,
+    title:document.getElementById('mTitle').value||document.getElementById('mType').value,
+    attendees:[...attendees], utterances:slimUtts(utterances), rawTranscript,
+    summary:'(analysis pending — transcript checkpoint)', decisions:[], actions:[], properties:[], quotes:[],
+    createdAt:new Date().toISOString(),
+  });
+
   setStep('analyse'); setProgress(82);
   showStatus('<div class="spin"></div>&nbsp; Analysing meeting…','info');
-  const rawTranscript=utterances.map(u=>`[${u.speakerName}]: ${u.text}`).join('\n');
   let analysis, analysisErr=null;
-  try   { analysis=await analyze(rawTranscript,s); }
+  try   { analysis=await analyzeTranscript(rawTranscript,s); }
   catch(e){ analysis=fallbackAnalysis(); analysisErr=e.message; }
+
   setStep('done'); setProgress(100);
+
   currentMeeting={
-    id:Date.now().toString(), date:document.getElementById('mDate').value, type:document.getElementById('mType').value,
+    id:Date.now().toString(),
+    date:document.getElementById('mDate').value,
+    type:document.getElementById('mType').value,
     title:document.getElementById('mTitle').value||document.getElementById('mType').value,
-    attendees:[...attendees], utterances, rawTranscript, spkMap:{...spkMap},
+    attendees:[...attendees], utterances, rawTranscript,
     summary:analysis.summary||'', decisions:analysis.decisions||[],
     actions:(analysis.actions||[]).map(a=>({...a,done:false})),
-    properties:analysis.properties||[], quotes:analysis.quotes||[], createdAt:new Date().toISOString(),
+    properties:analysis.properties||[], quotes:analysis.quotes||[],
+    createdAt:new Date().toISOString(),
   };
+  await persistDraft(currentMeeting);       // SAFEGUARD: full draft checkpoint
+
   renderResults(currentMeeting);
   document.getElementById('resultsWrap').classList.remove('hidden');
-  showStatus(analysisErr ? ('⚠ Transcript ready, but AI analysis failed: '+analysisErr+' — you can still save the transcript.') : '✓ Meeting processed — review below, then save.', analysisErr ? 'warn' : 'success');
   resetBtns();
+  await saveMeeting(true);                  // SAFEGUARD: auto-save — no manual step required
+  if(analysisErr) showStatus('✓ Transcript saved, but AI analysis failed: '+analysisErr,'warn');
   setTimeout(()=>document.getElementById('resultsWrap').scrollIntoView({behavior:'smooth',block:'start'}),200);
 }
-function resetBtns(){ document.getElementById('processBtn').disabled=false; document.getElementById('uploadBtn').disabled=false; }
+
+function resetBtns() {
+  processing=false;
+  document.getElementById('processBtn').disabled=false;
+  document.getElementById('uploadBtn').disabled=false;
+}
+
 async function runPipelineFromPaste() {
   const paste=document.getElementById('pasteArea').value.trim();
   if(!paste){ showStatus('⚠ Paste a transcript first.','warn'); return; }
-  if(!getProxy()){ showStatus('⚠ Set your Worker URL in Settings first.','warn'); return; }
+  processing=true;
   setStep('transcribe'); setProgress(30);
   const s=lsj(SKEY)||{};
   const utterances=[{speaker:'A',speakerName:s.spkA||'GMac',text:paste,start:0}];
   setStep('analyse'); setProgress(70);
   showStatus('<div class="spin"></div>&nbsp; Analysing…','info');
-  let analysis, analysisErr=null;
-  try   { analysis=await analyze(paste,s); }
-  catch(e){ analysis=fallbackAnalysis(); analysisErr=e.message; }
+  let analysis;
+  try   { analysis=await analyzeTranscript(paste,s); }
+  catch { analysis=fallbackAnalysis(); }
   setStep('done'); setProgress(100);
   currentMeeting={
-    id:Date.now().toString(), date:document.getElementById('mDate').value, type:document.getElementById('mType').value,
+    id:Date.now().toString(), date:document.getElementById('mDate').value,
+    type:document.getElementById('mType').value,
     title:document.getElementById('mTitle').value||document.getElementById('mType').value,
     attendees:[...attendees], utterances, rawTranscript:paste,
     summary:analysis.summary||'', decisions:analysis.decisions||[],
     actions:(analysis.actions||[]).map(a=>({...a,done:false})),
-    properties:analysis.properties||[], quotes:analysis.quotes||[], createdAt:new Date().toISOString(),
+    properties:analysis.properties||[], quotes:analysis.quotes||[],
+    createdAt:new Date().toISOString(),
   };
+  await persistDraft(currentMeeting);
   renderResults(currentMeeting);
   document.getElementById('resultsWrap').classList.remove('hidden');
-  showStatus(analysisErr?('⚠ Analysis failed: '+analysisErr):'✓ Analysis complete.', analysisErr?'warn':'success');
+  processing=false;
+  await saveMeeting(true);
   setTimeout(()=>document.getElementById('resultsWrap').scrollIntoView({behavior:'smooth',block:'start'}),200);
 }
+
+// ── TRANSCRIPTION BACKEND (Worker proxy preferred; direct AssemblyAI fallback) ──
 async function aaiUpload(file) {
-  const buf=await file.arrayBuffer();
-  const r=await fetch(getProxy()+'/upload',{method:'POST',headers:{...pHeaders(false),'content-type':'application/octet-stream'},body:buf});
-  if(!r.ok) throw new Error('HTTP '+r.status+' '+(await r.text().catch(()=>'')));
+  const proxy=getProxy(), buf=await file.arrayBuffer();
+  const url=proxy?proxy+'/upload':'https://api.assemblyai.com/v2/upload';
+  const headers=proxy?{'content-type':'application/octet-stream'}:{authorization:getKey(),'content-type':'application/octet-stream'};
+  const r=await fetch(url,{method:'POST',headers,body:buf});
+  if(!r.ok) throw new Error('Upload HTTP '+r.status);
   return (await r.json()).upload_url;
 }
-async function aaiSubmit(url) {
-  const exp=parseInt((document.getElementById('mSpeakers')||{}).value||'2',10);
-  const payload={audio_url:url,speaker_labels:true};
-  if(exp>0) payload.speakers_expected=exp;
-  const r=await fetch(getProxy()+'/transcript',{method:'POST',headers:pHeaders(true),body:JSON.stringify(payload)});
-  if(!r.ok) throw new Error('HTTP '+r.status);
+async function aaiSubmit(audioUrl) {
+  const proxy=getProxy();
+  const url=proxy?proxy+'/transcript':'https://api.assemblyai.com/v2/transcript';
+  const headers=proxy?{'content-type':'application/json'}:{authorization:getKey(),'content-type':'application/json'};
+  const r=await fetch(url,{method:'POST',headers,body:JSON.stringify({audio_url:audioUrl,speaker_labels:true,speakers_expected:Math.max(attendees.length,2)})});
+  if(!r.ok) throw new Error('Submit HTTP '+r.status);
   const d=await r.json(); if(d.error) throw new Error(d.error); return d.id;
 }
 async function aaiPoll(id,onProg) {
+  const proxy=getProxy();
+  const url=proxy?(proxy+'/transcript/'+id):('https://api.assemblyai.com/v2/transcript/'+id);
+  const headers=proxy?{}:{authorization:getKey()};
   const start=Date.now();
-  while(Date.now()-start<600000){
+  while(Date.now()-start<1200000){
     await sleep(4000);
-    const r=await fetch(getProxy()+'/transcript/'+id+'?t='+Date.now(),{headers:pHeaders(false)});
-    const d=await r.json();
+    let d;
+    try{ const r=await fetch(url,{headers}); d=await r.json(); }
+    catch(e){ continue; }   // transient network blip — keep polling, the job continues server-side
     if(d.status==='completed'){onProg&&onProg(1);return d;}
     if(d.status==='error') throw new Error(d.error||'Transcription failed');
-    onProg&&onProg(Math.min((Date.now()-start)/180000,0.9));
+    onProg&&onProg(Math.min((Date.now()-start)/240000,0.9));
   }
-  throw new Error('Timed out — try a shorter recording');
+  throw new Error('Timed out waiting for the transcript');
 }
-async function analyze(transcript,s) {
+async function analyzeTranscript(transcript,s) {
   const company=(s&&s.company)||'Thistle Rock Properties Ltd.';
   const context=(s&&s.context)||'Property management and development.';
   const prompt=`You are analysing a partner meeting for ${company}. Context: ${context}\n\nTRANSCRIPT:\n${transcript}\n\nReturn ONLY a valid JSON object — no markdown:\n{"summary":"3-4 sentence executive summary","decisions":["Decision 1"],"actions":[{"task":"description","owner":"name or Both","due":"timeframe"}],"properties":["property names"],"quotes":[{"speaker":"name","quote":"verbatim max 20 words","context":"why notable"}]}`;
-  const r=await fetch(getProxy()+'/analyze',{method:'POST',headers:pHeaders(true),body:JSON.stringify({prompt})});
-  if(!r.ok) throw new Error('HTTP '+r.status+' '+(await r.text().catch(()=>'')));
-  const d=await r.json();
-  if(d.error) throw new Error(typeof d.error==='string'?d.error:JSON.stringify(d.error));
-  const content=(d.choices&&d.choices[0]&&d.choices[0].message&&d.choices[0].message.content)||'';
-  if(!content) throw new Error('Empty analysis response');
-  return JSON.parse(content.replace(/```json|```/g,'').trim());
+  const proxy=getProxy();
+  if(proxy){
+    const r=await fetch(proxy+'/analyze',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({prompt})});
+    if(!r.ok){ let msg='Analyze HTTP '+r.status; try{ const d=await r.json(); if(d.error) msg=d.error; }catch(e){} throw new Error(msg); }
+    const d=await r.json(); if(d.error) throw new Error(d.error);
+    const text=(d.choices&&d.choices[0]&&d.choices[0].message&&d.choices[0].message.content)||'';
+    return JSON.parse(text.replace(/```json|```/g,'').trim());
+  }
+  const r=await fetch('https://api.assemblyai.com/lemur/v3/apply-task',{method:'POST',headers:{authorization:getKey(),'content-type':'application/json'},body:JSON.stringify({input_text:transcript,task:prompt,final_model:'anthropic/claude-3-5-sonnet',max_output_size:2000})});
+  if(!r.ok) throw new Error('LeMUR HTTP '+r.status);
+  const d=await r.json(); if(d.error) throw new Error(d.error);
+  return JSON.parse((d.response||'').replace(/```json|```/g,'').trim());
 }
-function fallbackAnalysis(){ return {summary:'Transcript captured, but AI analysis did not run (see the status message above).',decisions:[],actions:[],properties:[],quotes:[]}; }
+function fallbackAnalysis(){ return {summary:'Transcript captured. AI analysis was unavailable — the transcript itself is saved.',decisions:[],actions:[],properties:[],quotes:[]}; }
+
 function buildSpeakerMap(utterances,s){
-  const counts={};
+  const map={},counts={};
   utterances.forEach(u=>counts[u.speaker]=(counts[u.speaker]||0)+(u.text||'').split(' ').length);
   const sorted=Object.keys(counts).sort((a,b)=>counts[b]-counts[a]);
   const names=[s.spkA||'GMac',s.spkB||'Carlin',s.spkC||'Guest'];
-  const map={}; sorted.forEach((spk,i)=>map[spk]=names[i]||('Speaker '+(i+1))); return map;
+  sorted.forEach((spk,i)=>map[spk]=names[i]||('Speaker '+(i+1)));
+  return map;
 }
+
 function renderResults(m) {
-  renderSpeakerEditor(m);
   const tEl=document.getElementById('transcriptOut');
-  if(m.utterances&&m.utterances.length>1){
+  if(m.utterances&&m.utterances.length&&m.utterances.length>1){
     tEl.innerHTML=m.utterances.map(u=>{
       const name=u.speakerName||u.speaker;
       const cls=/gmac|graham/i.test(name)?'spk-gmac':/carlin/i.test(name)?'spk-carlin':'spk-other';
       const ts=u.start?`<span class="spk-time">${msToTime(u.start)}</span>`:'';
       return `<div class="utterance"><div class="spk-label ${cls}">${name} ${ts}</div><div class="spk-text">${u.text}</div></div>`;
     }).join('');
-  } else { tEl.innerHTML=`<div style="font-size:13px;line-height:1.8;color:var(--text-2);white-space:pre-wrap;">${m.rawTranscript}</div>`; }
+  } else {
+    tEl.innerHTML=`<div style="font-size:13px;line-height:1.8;color:var(--mid);white-space:pre-wrap;">${m.rawTranscript}</div>`;
+  }
   document.getElementById('summaryOut').innerHTML=`<p>${m.summary}</p>`;
   const dEl=document.getElementById('decisionsOut');
-  dEl.innerHTML=m.decisions&&m.decisions.length?m.decisions.map(d=>`<div style="display:flex;gap:10px;padding:7px 0;border-bottom:1px solid var(--border-2);font-size:14px;line-height:1.5;"><span style="color:var(--gold);flex-shrink:0;">▸</span><span>${d}</span></div>`).join(''):'<div class="small" style="padding:6px 0;">No formal decisions recorded.</div>';
+  dEl.innerHTML=m.decisions&&m.decisions.length?m.decisions.map(d=>`<div style="display:flex;gap:10px;padding:7px 0;border-bottom:1px solid var(--border);font-size:14px;line-height:1.5;"><span style="color:var(--gold);flex-shrink:0;">▸</span><span>${d}</span></div>`).join(''):'<div class="small" style="padding:6px 0;">No formal decisions recorded.</div>';
   const aEl=document.getElementById('actionsOut');
   aEl.innerHTML=m.actions&&m.actions.length?m.actions.map((a,i)=>{
     const oc=/carlin/i.test(a.owner)?'ab-carlin':/both/i.test(a.owner)?'ab-both':'ab-gmac';
     return `<li class="action-item"><div class="acheck ${a.done?'done':''}" onclick="toggleAction(${i})">${a.done?'✓':''}</div><div class="atext ${a.done?'struck':''}">${a.task}<div style="margin-top:4px;"><span class="abadge ${oc}">${a.owner||'?'}</span><span class="abadge ab-due">${a.due||'TBD'}</span></div></div></li>`;
   }).join(''):'<li class="small" style="padding:8px 0;">No action items identified.</li>';
   const pEl=document.getElementById('propsOut');
-  pEl.innerHTML=m.properties&&m.properties.length?m.properties.map(p=>`<div style="padding:6px 0;border-bottom:1px solid var(--border-2);font-size:14px;display:flex;gap:10px;"><span>🏠</span><span>${p}</span></div>`).join(''):'<div class="small" style="padding:6px 0;">No specific properties mentioned.</div>';
+  pEl.innerHTML=m.properties&&m.properties.length?m.properties.map(p=>`<div style="padding:6px 0;border-bottom:1px solid var(--border);font-size:14px;display:flex;gap:10px;"><span>🏠</span><span>${p}</span></div>`).join(''):'<div class="small" style="padding:6px 0;">No specific properties mentioned.</div>';
   const qEl=document.getElementById('quotesOut');
   qEl.innerHTML=m.quotes&&m.quotes.length?m.quotes.map(q=>{
     const cls=/carlin/i.test(q.speaker)?'spk-carlin':'spk-gmac';
-    return `<div style="padding:12px 0;border-bottom:1px solid var(--border-2);"><div class="spk-label ${cls}" style="margin-bottom:4px;">${q.speaker}</div><div style="font-size:14px;font-style:italic;color:var(--silver);line-height:1.6;">"${q.quote}"</div>${q.context?`<div class="small" style="margin-top:3px;">${q.context}</div>`:''}</div>`;
+    return `<div style="padding:12px 0;border-bottom:1px solid var(--border);"><div class="spk-label ${cls}" style="margin-bottom:4px;">${q.speaker}</div><div style="font-size:14px;font-style:italic;color:var(--light);line-height:1.6;">"${q.quote}"</div>${q.context?`<div class="small" style="margin-top:3px;">${q.context}</div>`:''}</div>`;
   }).join(''):'<div class="small" style="padding:6px 0;">No notable quotes extracted.</div>';
 }
-function toggleAction(i){ if(!currentMeeting)return; currentMeeting.actions[i].done=!currentMeeting.actions[i].done; renderResults(currentMeeting); }
+
+function toggleAction(i){ if(!currentMeeting)return; currentMeeting.actions[i].done=!currentMeeting.actions[i].done; renderResults(currentMeeting); if(currentMeeting.id===lastSavedId){ const all=getMeetings(),idx=all.findIndex(m=>m.id===currentMeeting.id); if(idx>=0){ all[idx]=currentMeeting; setMeetings(all); pushMeeting(slimForCloud(currentMeeting)); } } }
 function toggleResult(id){ const body=document.getElementById(id),tog=document.getElementById('rtb-'+id.replace('rb-','')),open=body.classList.toggle('open'); if(tog)tog.textContent=open?'▴ collapse':'▾ expand'; }
-function renderSpeakerEditor(m){
-  const card=document.getElementById('speakerCard'), ed=document.getElementById('speakerEditor');
-  if(!card||!ed) return;
-  const utts=m.utterances||[];
-  const labels=[...new Set(utts.map(u=>u.speaker))];
-  if(utts.length<=1){ card.classList.add('hidden'); return; } // pasted transcript — nothing to label
-  card.classList.remove('hidden');
-  const note = labels.length<=1
-    ? '<div class="status-bar s-warn" style="margin-bottom:12px;">Only one voice was detected on this recording, so it couldn’t be split by speaker. For next time: record a longer back-and-forth, take clear turns with a small gap, and set “Expected speakers” before recording.</div>'
-    : '';
-  ed.innerHTML = note + labels.map(l=>{
-    const cur=(m.spkMap&&m.spkMap[l]) || ((utts.find(u=>u.speaker===l)||{}).speakerName) || l;
-    const words=utts.filter(u=>u.speaker===l).reduce((n,u)=>n+(u.text||'').split(' ').length,0);
-    return `<div class="field"><label class="lbl">Voice ${l} · ${words} words</label><input type="text" id="spk_${l}" value="${(cur||'').replace(/"/g,'&quot;')}" placeholder="Name for voice ${l}" /></div>`;
-  }).join('');
-}
-function applySpeakerNames(){
+
+/* ══════════ SAFEGUARD: save = device + shared log; quota-safe; clears safety copies ══════════ */
+async function saveMeeting(auto){
   if(!currentMeeting) return;
-  const labels=[...new Set(currentMeeting.utterances.map(u=>u.speaker))];
-  currentMeeting.spkMap=currentMeeting.spkMap||{};
-  labels.forEach(l=>{ const el=document.getElementById('spk_'+l); if(el) currentMeeting.spkMap[l]=el.value.trim()||l; });
-  currentMeeting.utterances.forEach(u=>{ u.speakerName=currentMeeting.spkMap[u.speaker]||u.speakerName||u.speaker; });
-  renderResults(currentMeeting);
-  const all=getMeetings(),idx=all.findIndex(x=>x.id===currentMeeting.id);
-  if(idx>=0){ all[idx]=currentMeeting; setMeetings(all); pushMeeting(currentMeeting); }
-  showStatus('✓ Speaker names updated'+(idx>=0?' and saved to the shared log.':' — remember to Save to Log.'),'success');
+  const all=getMeetings(),idx=all.findIndex(m=>m.id===currentMeeting.id);
+  if(idx>=0) all[idx]=currentMeeting; else all.unshift(currentMeeting);
+  setMeetings(all);
+  lastSavedId=currentMeeting.id;
+  const proxy=getProxy();
+  if(!proxy){
+    await clearSafety();
+    showStatus('✓ '+(auto?'Auto-saved':'Saved')+' on this device. Set the Worker URL in Settings to enable the shared team log.','success');
+    return;
+  }
+  showStatus('<div class="spin"></div>&nbsp; Saving to the shared team log…','info');
+  const ok=await pushMeeting(slimForCloud(currentMeeting));
+  if(ok) await clearSafety();
+  showStatus(ok?('✓ '+(auto?'Auto-saved':'Saved')+' — on this device and the shared team log.'):'✓ Saved on this device, but the shared log could not be reached. A safety copy is kept and it will re-sync automatically next time the app loads.', ok?'success':'warn');
 }
-async function saveMeeting(){ if(!currentMeeting)return; const all=getMeetings(),idx=all.findIndex(m=>m.id===currentMeeting.id); if(idx>=0)all[idx]=currentMeeting; else all.unshift(currentMeeting); setMeetings(all);
-  showStatus('<div class="spin"></div>&nbsp; Saving to the shared log…','info');
-  const ok=await pushMeeting(currentMeeting);
-  showStatus(ok?'✓ Saved to the shared log — everyone on the team can see it.':'✓ Saved on this device, but couldn’t reach the shared log. Check your Worker URL and access code in Settings, then Save again.', ok?'success':'warn');
-}
-var MEM=null;
+
+/* ══════════ Local store (quota-safe) + shared store (MERGE — never overwrites local-only) ══════════ */
+function slimUtts(arr){ return (arr||[]).map(u=>({speaker:u.speaker,speakerName:u.speakerName,text:u.text,start:u.start,end:u.end})); }
+function slimForCache(list){ try{ return (list||[]).map(m=>({...m,utterances:slimUtts(m.utterances)})); }catch(e){ return list; } }
+function slimForCloud(m){ try{ return {...m,utterances:slimUtts(m.utterances)}; }catch(e){ return m; } }
 function getMeetings(){ return MEM?MEM:(lsj(STORE)||[]); }
-function slimForCache(arr){ try{ return (arr||[]).map(m=>({...m, utterances:(m.utterances||[]).map(u=>({speaker:u.speaker,speakerName:u.speakerName,text:u.text,start:u.start}))})); }catch(e){ return arr; } }
-function setMeetings(arr){ MEM=arr; lssj(STORE,slimForCache(arr)); }
-// ----- shared meeting store (via the Worker) -----
-var lastSync='';
+function setMeetings(arr){
+  MEM=arr;
+  try{ lssj(STORE,slimForCache(arr)); }
+  catch(e){ try{ lssj(STORE,slimForCache(arr).slice(0,15)); }catch(e2){ console.warn('localStorage full — in-memory only this session'); } }
+}
 async function pullMeetings(){
-  const proxy=getProxy(); if(!proxy){ lastSync='No Worker URL set in Settings.'; return getMeetings(); }
+  const proxy=getProxy();
+  if(!proxy){ lastSync='No Worker URL set — device-only mode.'; return getMeetings(); }
   try{
-    const r=await fetch(proxy+'/meetings?t='+Date.now(),{headers:pHeaders(false)});
-    if(!r.ok){ lastSync='Store replied HTTP '+r.status+'.'; return getMeetings(); }
+    const r=await fetch(proxy+'/meetings?t='+Date.now());
+    if(!r.ok){ lastSync='Shared log replied HTTP '+r.status+'.'; return getMeetings(); }
     const arr=await r.json();
-    if(Array.isArray(arr)){ setMeetings(arr); lastSync='✓ Loaded '+arr.length+' from the shared store.'; return arr; }
-    lastSync='Store sent an unexpected (non-list) response.';
-  }catch(e){ lastSync='Could not reach store: '+(e&&e.message?e.message:String(e)); }
+    if(!Array.isArray(arr)){ lastSync='Shared log sent an unexpected response.'; return getMeetings(); }
+    const local=getMeetings(), byId={};
+    arr.forEach(m=>{ if(m&&m.id) byId[m.id]=m; });
+    const localOnly=local.filter(m=>m&&m.id&&!byId[m.id]);
+    localOnly.forEach(m=>byId[m.id]=m);
+    const merged=Object.values(byId).sort((a,b)=>(b.createdAt||'').localeCompare(a.createdAt||''));
+    setMeetings(merged);
+    for(const m of localOnly){ pushMeeting(slimForCloud(m)); }   // heal the cloud with local-only meetings
+    lastSync='✓ Synced '+merged.length+' meeting'+(merged.length===1?'':'s')+(localOnly.length?(' · re-synced '+localOnly.length+' from this device'):'')+'.';
+    return merged;
+  }catch(e){ lastSync='Could not reach the shared log: '+(e&&e.message?e.message:String(e)); }
   return getMeetings();
 }
-async function pushMeeting(m){ const proxy=getProxy(); if(!proxy) return false; try{ const r=await fetch(proxy+'/meetings',{method:'POST',headers:pHeaders(true),body:JSON.stringify(m)}); return r.ok; }catch(e){ return false; } }
-async function pushDelete(id){ const proxy=getProxy(); if(!proxy) return false; try{ const r=await fetch(proxy+'/meetings/delete',{method:'POST',headers:pHeaders(true),body:JSON.stringify({id})}); return r.ok; }catch(e){ return false; } }
-async function loadLog(){ document.getElementById('logList').innerHTML='<div class="empty-state"><div class="spin" style="margin:0 auto;"></div><p>Loading the shared log…</p></div>'; await pullMeetings(); renderLog(); }
+async function pushMeeting(m){ const proxy=getProxy(); if(!proxy) return false; try{ const r=await fetch(proxy+'/meetings',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(m)}); return r.ok; }catch(e){ return false; } }
+async function pushDelete(id){ const proxy=getProxy(); if(!proxy) return false; try{ const r=await fetch(proxy+'/meetings/delete',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id})}); return r.ok; }catch(e){ return false; } }
+
+async function loadLog(){
+  document.getElementById('logList').innerHTML='<div class="empty-state"><div class="spin" style="margin:0 auto;"></div><p>Loading…</p></div>';
+  await pullMeetings(); renderLog();
+  document.getElementById('syncStatus').textContent=lastSync;
+}
 async function loadActions(){ await pullMeetings(); renderGlobalActions(); }
+
 function renderLog(){
   const all=getMeetings(),el=document.getElementById('logList');
-  const diag=lastSync?`<div class="small" style="margin-bottom:10px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;opacity:.9;">Sync status: ${lastSync}</div>`:'';
-  if(!all.length){el.innerHTML=diag+`<div class="empty-state"><div class="ei">📁</div><p>No meetings saved yet.</p></div>`;return;}
-  el.innerHTML=diag+all.map(m=>{
+  if(!all.length){el.innerHTML=`<div class="empty-state"><div class="ei">📁</div><p>No meetings saved yet.</p></div>`;return;}
+  el.innerHTML=all.map(m=>{
     const open=(m.actions||[]).filter(a=>!a.done).length;
     return `<div class="meeting-card" onclick="loadMeeting('${m.id}')"><div class="mc-head"><div class="mc-title">${m.title||m.type}</div><div style="display:flex;gap:8px;align-items:center;flex-shrink:0;"><span class="mc-date">${fmtDate(m.date)}</span><button class="btn btn-ghost btn-xs" title="Delete this meeting" onclick="event.stopPropagation();deleteMeeting('${m.id}')">🗑</button></div></div><div class="mc-summary">${(m.summary||'').substring(0,150)}…</div><div class="mc-tags"><span class="tag">${m.type}</span><span class="tag">${(m.attendees||[]).join(' · ')}</span>${open?`<span class="tag tag-open">${open} open action${open>1?'s':''}</span>`:''}</div></div>`;
   }).join('');
 }
-function loadMeeting(id){ const m=getMeetings().find(x=>x.id===id);if(!m)return;currentMeeting=m;document.getElementById('mDate').value=m.date;document.getElementById('mType').value=m.type;document.getElementById('mTitle').value=m.title||'';renderResults(m);document.getElementById('resultsWrap').classList.remove('hidden');showTab('new');setTimeout(()=>document.getElementById('resultsWrap').scrollIntoView({behavior:'smooth'}),120); }
-async function deleteMeeting(id){ if(!confirm('Delete this meeting permanently? This removes it for everyone on the team and cannot be undone.')) return; const all=getMeetings().filter(m=>m.id!==id); setMeetings(all); if(currentMeeting&&currentMeeting.id===id){ currentMeeting=null; document.getElementById('resultsWrap').classList.add('hidden'); } await pushDelete(id); renderLog(); }
+function loadMeeting(id){ const m=getMeetings().find(x=>x.id===id);if(!m)return;currentMeeting=m;lastSavedId=m.id;document.getElementById('mDate').value=m.date;document.getElementById('mType').value=m.type;document.getElementById('mTitle').value=m.title||'';renderResults(m);document.getElementById('resultsWrap').classList.remove('hidden');showTab('new');setTimeout(()=>document.getElementById('resultsWrap').scrollIntoView({behavior:'smooth'}),120); }
+async function deleteMeeting(id){
+  if(!confirm('Delete this meeting permanently? This removes it for everyone on the team and cannot be undone. Consider Export All first.')) return;
+  const all=getMeetings().filter(m=>m.id!==id); setMeetings(all);
+  if(currentMeeting&&currentMeeting.id===id){ currentMeeting=null; document.getElementById('resultsWrap').classList.add('hidden'); }
+  await pushDelete(id); renderLog();
+}
+
 function renderGlobalActions(){
   const all=getMeetings(),el=document.getElementById('globalActions');
   const open=[];all.forEach(m=>(m.actions||[]).filter(a=>!a.done).forEach(a=>open.push({...a,mTitle:m.title||m.type,mDate:m.date,mId:m.id})));
   if(!open.length){el.innerHTML=`<div class="empty-state"><div class="ei">✅</div><p>All clear.</p></div>`;return;}
   el.innerHTML=`<ul class="action-list">${open.map(a=>{const oc=/carlin/i.test(a.owner)?'ab-carlin':/both/i.test(a.owner)?'ab-both':'ab-gmac';return`<li class="action-item"><div class="acheck" onclick="doneGlobal('${a.mId}','${esc(a.task)}')"></div><div class="atext">${a.task}<div style="margin-top:4px;"><span class="abadge ${oc}">${a.owner||'?'}</span><span class="abadge ab-due">${a.due||'TBD'}</span><span class="small" style="margin-left:6px;">· ${a.mTitle} (${fmtDate(a.mDate)})</span></div></div></li>`;}).join('')}</ul>`;
 }
-async function doneGlobal(mId,task){ const all=getMeetings(),m=all.find(x=>x.id===mId);if(!m)return;const a=m.actions.find(x=>x.task===task);if(a)a.done=true;setMeetings(all);renderGlobalActions(); await pushMeeting(m); }
+async function doneGlobal(mId,task){ const all=getMeetings(),m=all.find(x=>x.id===mId);if(!m)return;const a=m.actions.find(x=>x.task===task);if(a)a.done=true;setMeetings(all);renderGlobalActions(); await pushMeeting(slimForCloud(m)); }
+
 function exportCurrent(){ if(!currentMeeting)return; dlJson([currentMeeting],`TR_Meeting_${currentMeeting.date}.json`); }
 function exportAll(){ const all=getMeetings();if(!all.length){alert('No meetings yet.');return;}dlJson(all,`TR_Meetings_${today()}.json`); }
 function dlJson(d,n){ const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(d,null,2)],{type:'application/json'}));a.download=n;a.click(); }
-function importMeetings(e){
-  const f=e.target.files[0]; if(!f) return;
-  const r=new FileReader();
-  r.onload=async ()=>{
-    let data; try{ data=JSON.parse(r.result); }catch(err){ alert('That file is not valid JSON.'); return; }
-    const incoming=Array.isArray(data)?data:[data];
-    const valid=incoming.filter(m=>m&&m.id&&m.utterances);
-    if(!valid.length){ alert('No meetings found in that file.'); e.target.value=''; return; }
-    const all=getMeetings(); const byId={}; all.forEach(m=>byId[m.id]=m);
-    let added=0,updated=0;
-    valid.forEach(m=>{ if(byId[m.id]) updated++; else added++; byId[m.id]=m; });
-    const merged=Object.values(byId).sort((a,b)=>(b.createdAt||'').localeCompare(a.createdAt||''));
-    setMeetings(merged); e.target.value='';
-    for(const m of valid){ await pushMeeting(m); }
-    await pullMeetings(); renderLog();
-    alert('Imported '+added+' new meeting'+(added===1?'':'s')+(updated?(', updated '+updated):'')+' into the shared log. The log now holds '+getMeetings().length+'.');
-  };
-  r.readAsText(f);
-}
+
 function resetAll(){
+  if(isDirty()&&!confirm('The current meeting has not finished saving. Start a new one anyway?')) return;
   currentMeeting=null;selectedFile=null;
+  document.getElementById('nativeAudioInput').value='';
   document.getElementById('audioInput').value='';
   document.getElementById('filePillWrap').classList.add('hidden');
   document.getElementById('uploadFilePill').classList.add('hidden');
@@ -779,12 +1026,11 @@ function resetAll(){
   document.getElementById('resultsWrap').classList.add('hidden');
   document.getElementById('progWrap').classList.add('hidden');
   document.getElementById('statusEl').classList.add('hidden');
-  document.getElementById('recTimer').classList.add('hidden');
-  document.getElementById('recLabel').textContent='Tap to start recording';
   resetBtns();
   STEPS.forEach(s=>document.getElementById('ps-'+s).className='pipe-step');
 }
-function nukeData(){ if(confirm('Delete ALL meetings, settings, and saved connection?')){ [STORE,SKEY,KKEY,PKEY].forEach(k=>localStorage.removeItem(k));location.reload(); } }
+function nukeData(){ if(confirm('Delete ALL meetings, settings, keys, and safety copies on THIS DEVICE? (The shared team log is not affected.)')){ [STORE,SKEY,KKEY,PKEY].forEach(k=>localStorage.removeItem(k)); try{ indexedDB.deleteDatabase('tr_meet_safety'); }catch(e){} location.reload(); } }
+
 function today(){ return new Date().toISOString().split('T')[0]; }
 function fmtDate(d){ if(!d)return'';return new Date(d+'T12:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}); }
 function msToTime(ms){ const s=Math.floor(ms/1000),m=Math.floor(s/60);return`${m}:${(s%60).toString().padStart(2,'0')}`; }
@@ -793,7 +1039,8 @@ function esc(s){ return(s||'').replace(/'/g,"\\'").replace(/"/g,'&quot;'); }
 function ls(k){ return localStorage.getItem(k); }
 function lss(k,v){ localStorage.setItem(k,v); }
 function lsj(k){ try{return JSON.parse(localStorage.getItem(k));}catch{return null;} }
-function lssj(k,v){ try{ localStorage.setItem(k,JSON.stringify(v)); return true; }catch(e){ return false; } }
+function lssj(k,v){ localStorage.setItem(k,JSON.stringify(v)); }
+
 boot();
 </script>
 </body>
