@@ -92,6 +92,16 @@ main { max-width: 820px; margin: 0 auto; padding: 24px 16px 80px; }
   transition: transform 0.15s;
 }
 .record-btn:active { transform: scale(0.95); }
+.record-btn.recording { animation: recpulse 1.3s infinite; }
+@keyframes recpulse {
+  0%   { box-shadow: 0 4px 20px rgba(231,76,60,0.35), 0 0 0 0 rgba(231,76,60,0.45); }
+  70%  { box-shadow: 0 4px 20px rgba(231,76,60,0.35), 0 0 0 18px rgba(231,76,60,0); }
+  100% { box-shadow: 0 4px 20px rgba(231,76,60,0.35), 0 0 0 0 rgba(231,76,60,0); }
+}
+.rec-timer {
+  font-family: 'JetBrains Mono', monospace; font-size: 20px;
+  color: var(--white); letter-spacing: 0.06em;
+}
 .record-label {
   font-size: 13px; font-weight: 500; color: var(--mid);
   letter-spacing: 0.03em; text-align: center; line-height: 1.5;
@@ -345,19 +355,13 @@ select option { background: var(--panel); }
   <div class="card">
     <div class="card-title">Record Meeting</div>
     <div class="record-zone">
-      <button class="record-btn" onclick="triggerNativeRecord()" title="Record meeting">🎙</button>
-      <div class="record-label">Tap to record your meeting</div>
+      <button class="record-btn" id="recBtn" onclick="toggleRecord()" title="Record meeting">🎙</button>
+      <div class="rec-timer hidden" id="recTimer">00:00</div>
+      <div class="record-label" id="recLabel">Tap to record your meeting</div>
       <div class="record-hint">
-        <span id="record-hint-text">Opens your phone's recorder — your copy stays on device too.<br>
-        Record → tap Stop → the file loads, processes, and saves automatically.</span>
+        Records right here in the page (allow microphone when asked).<br>
+        Tap once to start → tap again to stop → the file saves and processes automatically.
       </div>
-      <script>
-        if (/iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream) {
-          document.getElementById('record-hint-text').innerHTML =
-            'On iPhone: tap → select Voice Memos → tap ⏺ to record → tap Done.<br>' +
-            'The file loads and processes automatically.';
-        }
-      </script>
     </div>
     <!-- Hidden input that triggers native audio capture -->
     <input type="file" id="nativeAudioInput" accept="audio/*" capture="microphone" onchange="onNativeAudio(event)" />
@@ -685,22 +689,50 @@ function renderChips() {
 function addAttendee() { const inp=document.getElementById('newAttendee'),v=inp.value.trim(); if(!v)return; attendees.push(v); inp.value=''; renderChips(); saveSettings(); }
 function removeAttendee(i) { attendees.splice(i,1); renderChips(); saveSettings(); }
 
-// ── NATIVE RECORD (iOS/Android-friendly; the phone's recorder keeps its own copy) ──
-function triggerNativeRecord() {
-  const inp = document.getElementById('nativeAudioInput');
-  // iOS Safari bug: capture="microphone" opens the CAMERA instead of the mic (WebKit issue).
-  // Fix: remove capture on iOS so the file picker opens (Voice Memos / Files app).
-  // Android handles capture="microphone" correctly, so leave it in place there.
-  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
-  if (isIOS) {
-    inp.removeAttribute('capture');
-  } else {
-    inp.setAttribute('capture', 'microphone');
+// ── IN-PAGE RECORD (MediaRecorder — works on iOS Safari, Android, desktop) ──
+// History: capture="microphone" on a file input opens the CAMERA on iOS (WebKit bug),
+// and without capture iOS shows a photo/file picker with no record option.
+// MediaRecorder via getUserMedia is the only reliable in-page mic recording on iPhone.
+let mediaRecorder=null, recChunks=[], recStream=null, recTimerInt=null, recStart=0;
+
+async function toggleRecord() {
+  if (mediaRecorder && mediaRecorder.state === 'recording') { stopRecording(); return; }
+  if (!navigator.mediaDevices || !window.MediaRecorder) {
+    // Fallback: very old browser — use the native file input instead
+    document.getElementById('nativeAudioInput').removeAttribute('capture');
+    document.getElementById('nativeAudioInput').click();
+    return;
   }
-  inp.click();
+  try { recStream = await navigator.mediaDevices.getUserMedia({ audio:true }); }
+  catch(e){ showStatus('⚠ Microphone blocked: '+e.message+'. Allow mic access in your browser settings, or use Upload below.','error'); return; }
+  recChunks = [];
+  mediaRecorder = new MediaRecorder(recStream);
+  mediaRecorder.ondataavailable = e => { if (e.data && e.data.size>0) recChunks.push(e.data); };
+  mediaRecorder.onstop = async () => {
+    const type = (recChunks[0] && recChunks[0].type) || 'audio/mp4';
+    const blob = new Blob(recChunks, { type });
+    const ext = type.includes('mp4') ? 'm4a' : (type.includes('ogg') ? 'ogg' : 'webm');
+    const f = new File([blob], 'meeting-recording-'+today()+'.'+ext, { type });
+    if (recStream) { recStream.getTracks().forEach(t=>t.stop()); recStream=null; }
+    await handleRecordedFile(f);
+  };
+  mediaRecorder.start(1000); // collect data every second so a crash loses almost nothing
+  recStart = Date.now();
+  document.getElementById('recBtn').classList.add('recording');
+  document.getElementById('recLabel').textContent = 'Recording… tap to stop';
+  const tEl = document.getElementById('recTimer'); tEl.classList.remove('hidden');
+  recTimerInt = setInterval(()=>{ tEl.textContent = fmtTimer(Date.now()-recStart); }, 500);
 }
-async function onNativeAudio(e) {
-  const f = e.target.files[0]; if (!f) return;
+function stopRecording() {
+  if (mediaRecorder && mediaRecorder.state==='recording') mediaRecorder.stop();
+  clearInterval(recTimerInt);
+  document.getElementById('recBtn').classList.remove('recording');
+  document.getElementById('recLabel').textContent = 'Tap to record your meeting';
+  document.getElementById('recTimer').classList.add('hidden');
+}
+function fmtTimer(ms){ const s=Math.floor(ms/1000); return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0'); }
+
+async function handleRecordedFile(f) {
   selectedFile = f;
   document.getElementById('fName').textContent = f.name;
   document.getElementById('fSize').textContent = (f.size/1024/1024).toFixed(1)+' MB';
@@ -708,6 +740,10 @@ async function onNativeAudio(e) {
   await persistAudio(f);                    // SAFEGUARD: safety copy before anything else
   if(!getProxy()&&!getKey()){ showStatus('✓ Recording saved safely on this device. Set the Worker URL (or an AssemblyAI key) in Settings, then tap “Process Meeting”.','warn'); return; }
   runPipeline();                            // SAFEGUARD: auto-process
+}
+async function onNativeAudio(e) {
+  const f = e.target.files[0]; if (!f) return;
+  await handleRecordedFile(f);
 }
 
 // ── UPLOAD FILE ──
