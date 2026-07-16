@@ -348,9 +348,16 @@ select option { background: var(--panel); }
       <button class="record-btn" onclick="triggerNativeRecord()" title="Record meeting">🎙</button>
       <div class="record-label">Tap to record your meeting</div>
       <div class="record-hint">
-        Opens your phone's native recorder — your phone keeps its own copy too.<br>
-        Record → tap Stop → the file loads, processes, and saves automatically.
+        <span id="record-hint-text">Opens your phone's recorder — your copy stays on device too.<br>
+        Record → tap Stop → the file loads, processes, and saves automatically.</span>
       </div>
+      <script>
+        if (/iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream) {
+          document.getElementById('record-hint-text').innerHTML =
+            'On iPhone: tap → select Voice Memos → tap ⏺ to record → tap Done.<br>' +
+            'The file loads and processes automatically.';
+        }
+      </script>
     </div>
     <!-- Hidden input that triggers native audio capture -->
     <input type="file" id="nativeAudioInput" accept="audio/*" capture="microphone" onchange="onNativeAudio(event)" />
@@ -680,7 +687,17 @@ function removeAttendee(i) { attendees.splice(i,1); renderChips(); saveSettings(
 
 // ── NATIVE RECORD (iOS/Android-friendly; the phone's recorder keeps its own copy) ──
 function triggerNativeRecord() {
-  document.getElementById('nativeAudioInput').click();
+  const inp = document.getElementById('nativeAudioInput');
+  // iOS Safari bug: capture="microphone" opens the CAMERA instead of the mic (WebKit issue).
+  // Fix: remove capture on iOS so the file picker opens (Voice Memos / Files app).
+  // Android handles capture="microphone" correctly, so leave it in place there.
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+  if (isIOS) {
+    inp.removeAttribute('capture');
+  } else {
+    inp.setAttribute('capture', 'microphone');
+  }
+  inp.click();
 }
 async function onNativeAudio(e) {
   const f = e.target.files[0]; if (!f) return;
