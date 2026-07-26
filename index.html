@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Thistle Rock Meeting Intelligence v3.0 — HARDENED BUILD 2026-07-02
+<!-- Thistle Rock Meeting Intelligence v3.1 — HARDENED BUILD 2026-07-26 (multi-slot safety, restart guard, zero-byte trap, auto-save, crash-mirror)
      Safeguards: IndexedDB audio+meeting persistence with recovery banner · auto-process ·
      auto-save to device AND shared team log · leave-page warning · cloud/local MERGE sync
      (never overwrites local-only meetings) · storage-quota-safe writes · dual mode
@@ -292,7 +292,7 @@ select option { background: var(--panel); }
     <div class="brand-mark"><img src="data:image/png;base64,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" alt="Thistle Rock" style="width:100%;height:100%;object-fit:cover;border-radius:8px;"></div>
     <div>
       <div class="brand-name">Thistle Rock</div>
-      <div class="brand-sub">Meeting Intelligence · v3.0</div>
+      <div class="brand-sub">Meeting Intelligence · v3.1</div>
     </div>
   </div>
   <button class="btn btn-ghost btn-sm" onclick="exportAll()">⬇ Export</button>
@@ -482,9 +482,11 @@ select option { background: var(--panel); }
 
     <div class="flex gap-12 mt-16 fw">
       <button class="btn btn-primary" onclick="saveMeeting()" style="flex:1;min-width:140px;">💾 Save to Log</button>
+      <button class="btn btn-ghost" onclick="openReportCurrent()">📄 Executive Report</button>
       <button class="btn btn-ghost" onclick="exportCurrent()">⬇ Export JSON</button>
       <button class="btn btn-ghost btn-sm" onclick="resetAll()">↺ New Meeting</button>
     </div>
+    <div id="saveStatusEl" class="hidden status-bar s-info" style="margin-top:12px;"></div>
   </div>
 
 </div><!-- /tab-new -->
@@ -494,6 +496,9 @@ select option { background: var(--panel); }
   <div class="card">
     <div class="card-title">All Meetings</div>
     <div class="small" id="syncStatus" style="margin-bottom:10px;"></div>
+    <div class="flex gap-8 fw" style="margin-bottom:12px;">
+      <button class="btn btn-ghost btn-sm" onclick="openAllReport()">📄 Summary Report — All Meetings</button>
+    </div>
     <div id="logList"><div class="empty-state"><div class="ei">📁</div><p>No meetings saved yet.</p></div></div>
   </div>
 </div>
@@ -553,6 +558,7 @@ const STORE='tr2_meetings', SKEY='tr2_settings', KKEY='tr2_aai_key', PKEY='tr2_p
 const APP_VERSION='3.0';
 let currentMeeting=null, selectedFile=null, attendees=['GMac','Carlin'];
 let processing=false, lastSavedId=null;
+let curAudioKey=null, recStopAt=0, recStopping=false, recActiveId=null, liveLastSave=0;
 var MEM=null, lastSync='';
 
 /* ══════════ SAFEGUARD: IndexedDB persistence layer ══════════ */
@@ -572,35 +578,65 @@ const IDB={db:null,
       const q=t.objectStore(store).get(key); q.onsuccess=()=>res(q.result); q.onerror=()=>rej(q.error); }); },
   async del(store,key){ if(!IDB.db) await IDB.open();
     return new Promise((res,rej)=>{ const t=IDB.db.transaction(store,'readwrite');
-      t.objectStore(store).delete(key); t.oncomplete=()=>res(true); t.onerror=()=>rej(t.error); }); }
+      t.objectStore(store).delete(key); t.oncomplete=()=>res(true); t.onerror=()=>rej(t.error); }); },
+  async entries(store){ if(!IDB.db) await IDB.open();
+    return new Promise((res)=>{ const out=[]; const t=IDB.db.transaction(store,'readonly');
+      const c=t.objectStore(store).openCursor();
+      c.onsuccess=e=>{ const cur=e.target.result; if(cur){ out.push({key:cur.key,val:cur.value}); cur.continue(); } else res(out); };
+      c.onerror=()=>res(out); }); }
 };
-async function persistAudio(f){
-  try{ await IDB.put('audio','pending',{blob:f,name:f.name,type:f.type,when:new Date().toISOString()}); }
-  catch(e){ console.warn('Audio safety copy failed:',e); }
+// SAFEGUARD v4: every recording is stored under its OWN unique key, so a new
+// recording can NEVER overwrite a previous one. Returns {ok,key}; ok is true
+// only when a non-empty blob was written AND read back at the right size.
+async function persistAudio(f, id){
+  if(!f || !f.size){ console.error('persistAudio refused: 0-byte audio'); return {ok:false,key:null}; }
+  const key = 'rec_' + (id || Date.now());
+  try{
+    await IDB.put('audio', key, {id:key, blob:f, name:f.name, type:f.type, size:f.size, when:new Date().toISOString()});
+    const back = await IDB.get('audio', key);
+    return { ok: !!(back && back.blob && back.blob.size === f.size), key };
+  }catch(e){ console.error('Audio safety copy failed:', e); return {ok:false, key}; }
 }
+// SAFEGUARD v4: mirror the growing recording to storage during capture, so a
+// crash/kill mid-meeting still leaves a recoverable file.
+async function persistLive(id, blob){ try{ if(blob&&blob.size) await IDB.put('audio','live_'+id,{id:'live_'+id,live:true,blob,type:blob.type,size:blob.size,when:new Date().toISOString()}); }catch(e){} }
+async function dropLive(id){ try{ await IDB.del('audio','live_'+id); }catch(e){} }
 async function persistDraft(m){
   try{ await IDB.put('meeting','unsaved',m); }catch(e){ console.warn('Draft safety copy failed:',e); }
 }
-async function clearSafety(){
+// SAFEGUARD v4: clearing is SCOPED to the recording just saved — it never wipes
+// other unprocessed recordings still sitting in the safety store.
+async function clearSafety(key){
   try{ await IDB.del('meeting','unsaved'); }catch(e){}
-  try{ await IDB.del('audio','pending'); }catch(e){}
+  if(key){ try{ await IDB.del('audio', key); }catch(e){} const base=String(key).replace(/^rec_/,''); try{ await IDB.del('audio','live_'+base); }catch(e){} }
 }
+async function shareBlobFile(f){
+  if(!f||!f.size){ alert('No audio to save.'); return; }
+  try{ if(navigator.canShare && navigator.canShare({files:[f]})){ await navigator.share({files:[f], title:'Meeting recording'}); return; } }catch(e){ if(String(e).indexOf('AbortError')>=0) return; }
+  const u=URL.createObjectURL(f); const a=document.createElement('a'); a.href=u; a.download=f.name||'meeting.m4a'; a.click(); setTimeout(()=>URL.revokeObjectURL(u),6000);
+}
+function shareCurrentAudio(){ shareBlobFile(selectedFile); }
 
 /* ══════════ SAFEGUARD: recovery banner on load ══════════ */
 function showRecovery(html){ const el=document.getElementById('recoveryBar'); if(el) el.innerHTML=html; }
 async function checkRecovery(){
   try{
+    let html='';
     const m=await IDB.get('meeting','unsaved');
-    if(m&&m.id){
-      window.__recMeeting=m;
-      showRecovery('<div class="status-bar s-warn" style="flex-wrap:wrap;">⚠ Recovered an unsaved meeting from '+fmtDate(m.date)+' — "'+(m.title||m.type||'Untitled')+'".&nbsp;<button class="btn btn-gold btn-sm" onclick="restoreMeeting()">Restore &amp; Save</button>&nbsp;<button class="btn btn-ghost btn-sm" onclick="discardRecovery(\'meeting\')">Discard</button></div>');
-      return;
+    if(m&&m.id){ window.__recMeeting=m;
+      html += '<div class="status-bar s-warn" style="flex-wrap:wrap;">⚠ Recovered an unsaved meeting from '+fmtDate(m.date)+' — "'+(m.title||m.type||'Untitled')+'".&nbsp;<button class="btn btn-gold btn-sm" onclick="restoreMeeting()">Restore &amp; Save</button>&nbsp;<button class="btn btn-ghost btn-sm" onclick="discardRecovery(\'meeting\')">Discard</button></div>';
     }
-    const a=await IDB.get('audio','pending');
-    if(a&&a.blob&&a.blob.size>0){
-      window.__recAudio=a;
-      showRecovery('<div class="status-bar s-warn" style="flex-wrap:wrap;">⚠ Found a recording from '+new Date(a.when).toLocaleString()+' ('+(a.blob.size/1024/1024).toFixed(1)+' MB) that was never processed.&nbsp;<button class="btn btn-gold btn-sm" onclick="recoverAudio()">Process Now</button>&nbsp;<button class="btn btn-ghost btn-sm" onclick="downloadRecovered()">Download Audio</button>&nbsp;<button class="btn btn-ghost btn-sm" onclick="discardRecovery(\'audio\')">Discard</button></div>');
+    // SAFEGUARD v4: surface EVERY unprocessed recording (multi-slot), including a
+    // crash-interrupted 'live_' capture. Empty 0-byte slots are auto-cleaned, never shown.
+    const list=await IDB.entries('audio');
+    window.__recAudioMap={};
+    for(const {key,val} of (list||[])){
+      if(!val || !val.blob || !val.blob.size){ try{ await IDB.del('audio', key); }catch(e){} continue; }
+      window.__recAudioMap[key]=val;
+      const live=String(key).indexOf('live_')===0;
+      html += '<div class="status-bar s-warn" style="flex-wrap:wrap;">⚠ '+(live?'An INTERRUPTED recording':'A recording')+' from '+new Date(val.when).toLocaleString()+' ('+(val.blob.size/1024/1024).toFixed(1)+' MB) was never processed.&nbsp;<button class="btn btn-gold btn-sm" onclick="recoverAudio(\''+key+'\')">Process Now</button>&nbsp;<button class="btn btn-ghost btn-sm" onclick="shareRecovered(\''+key+'\')">Save to Files</button>&nbsp;<button class="btn btn-ghost btn-sm" onclick="discardRecovery(\'audio\',\''+key+'\')">Discard</button></div>';
     }
+    showRecovery(html);
   }catch(e){ console.warn('Recovery check failed:',e); }
 }
 function restoreMeeting(){
@@ -609,25 +645,28 @@ function restoreMeeting(){
   document.getElementById('resultsWrap').classList.remove('hidden');
   showRecovery(''); saveMeeting(true);
 }
-function recoverAudio(){
-  const a=window.__recAudio; if(!a) return;
+function recoverAudio(key){
+  const a=(window.__recAudioMap||{})[key]; if(!a) return;
+  curAudioKey=key;
   selectedFile=new File([a.blob],a.name||'recovered-recording.m4a',{type:a.type||'audio/mp4'});
   document.getElementById('fName').textContent=selectedFile.name;
   document.getElementById('fSize').textContent=(selectedFile.size/1024/1024).toFixed(1)+' MB';
   document.getElementById('filePillWrap').classList.remove('hidden');
   showRecovery(''); runPipeline();
 }
-function downloadRecovered(){
-  const a=window.__recAudio; if(!a) return;
+function shareRecovered(key){ const a=(window.__recAudioMap||{})[key]; if(!a)return; shareBlobFile(new File([a.blob],a.name||'recording.m4a',{type:a.type||'audio/mp4'})); }
+function downloadRecovered(key){
+  const a=(window.__recAudioMap||{})[key]; if(!a) return;
   const el=document.createElement('a');
   el.href=URL.createObjectURL(a.blob);
   el.download=(a.name&&a.name.includes('.'))?a.name:('TR_recovered_audio_'+(a.when||'').split('T')[0]+'.m4a');
   el.click();
 }
-async function discardRecovery(kind){
+async function discardRecovery(kind,key){
   if(!confirm('Discard this permanently? If it is your only copy it cannot be recovered.')) return;
-  try{ await IDB.del(kind==='audio'?'audio':'meeting', kind==='audio'?'pending':'unsaved'); }catch(e){}
-  showRecovery('');
+  if(kind==='audio'){ try{ await IDB.del('audio', key); }catch(e){} }
+  else { try{ await IDB.del('meeting','unsaved'); }catch(e){} }
+  checkRecovery();
 }
 
 /* ══════════ SAFEGUARD: leave-page warning while unsaved ══════════ */
@@ -697,6 +736,11 @@ let mediaRecorder=null, recChunks=[], recStream=null, recTimerInt=null, recStart
 
 async function toggleRecord() {
   if (mediaRecorder && mediaRecorder.state === 'recording') { stopRecording(); return; }
+  // SAFEGUARD v4: guard against an accidental tap right after stopping — the stray
+  // restart that silently overwrote a real recording. Require a deliberate confirm.
+  if (recStopping || (Date.now()-recStopAt) < 4000) {
+    if(!confirm('Start a NEW recording? Your previous recording is already saved — this begins a separate, new one.')) return;
+  }
   if (!navigator.mediaDevices || !window.MediaRecorder) {
     // Fallback: very old browser — use the native file input instead
     document.getElementById('nativeAudioInput').removeAttribute('capture');
@@ -706,15 +750,33 @@ async function toggleRecord() {
   try { recStream = await navigator.mediaDevices.getUserMedia({ audio:true }); }
   catch(e){ showStatus('⚠ Microphone blocked: '+e.message+'. Allow mic access in your browser settings, or use Upload below.','error'); return; }
   recChunks = [];
-  mediaRecorder = new MediaRecorder(recStream);
-  mediaRecorder.ondataavailable = e => { if (e.data && e.data.size>0) recChunks.push(e.data); };
+  // 32 kbps mono — clear speech quality, ~14 MB/hour. Keeps even 6-hour meetings
+  // under the 100 MB Cloudflare proxy upload limit (129 MB failure, 2026-07-16).
+  try { mediaRecorder = new MediaRecorder(recStream, { audioBitsPerSecond: 32000 }); }
+  catch(e) { mediaRecorder = new MediaRecorder(recStream); }
+  recActiveId = Date.now(); liveLastSave = 0;
+  mediaRecorder.ondataavailable = e => {
+    if (e.data && e.data.size>0) recChunks.push(e.data);
+    if (recChunks.length && Date.now()-liveLastSave > 5000) {            // SAFEGUARD v4: live crash-mirror
+      liveLastSave = Date.now();
+      try { persistLive(recActiveId, new Blob(recChunks, {type:(recChunks[0]&&recChunks[0].type)||'audio/mp4'})); } catch(_){}
+    }
+  };
   mediaRecorder.onstop = async () => {
+    recStopping = false;
+    if (recStream) { recStream.getTracks().forEach(t=>t.stop()); recStream=null; }
     const type = (recChunks[0] && recChunks[0].type) || 'audio/mp4';
     const blob = new Blob(recChunks, { type });
+    // SAFEGUARD v4: ZERO-BYTE TRAP — if nothing was captured, refuse it loudly and
+    // do NOT touch any existing recording. An empty file is never saved.
+    if (!recChunks.length || !blob.size) {
+      showStatus('✗ RECORDING FAILED — no audio was captured (0 bytes). Nothing was saved and nothing was overwritten. Please record again.','error');
+      return;
+    }
     const ext = type.includes('mp4') ? 'm4a' : (type.includes('ogg') ? 'ogg' : 'webm');
-    const f = new File([blob], 'meeting-recording-'+today()+'.'+ext, { type });
-    if (recStream) { recStream.getTracks().forEach(t=>t.stop()); recStream=null; }
-    await handleRecordedFile(f);
+    const f = new File([blob], 'meeting-recording-'+today()+'-'+recActiveId+'.'+ext, { type });
+    await dropLive(recActiveId);
+    await handleRecordedFile(f, recActiveId);
   };
   mediaRecorder.start(1000); // collect data every second so a crash loses almost nothing
   recStart = Date.now();
@@ -724,21 +786,34 @@ async function toggleRecord() {
   recTimerInt = setInterval(()=>{ tEl.textContent = fmtTimer(Date.now()-recStart); }, 500);
 }
 function stopRecording() {
+  recStopping = true; recStopAt = Date.now();   // SAFEGUARD v4: arm the restart cooldown
   if (mediaRecorder && mediaRecorder.state==='recording') mediaRecorder.stop();
   clearInterval(recTimerInt);
   document.getElementById('recBtn').classList.remove('recording');
-  document.getElementById('recLabel').textContent = 'Tap to record your meeting';
+  document.getElementById('recLabel').textContent = 'Saving… (tap again only to start a NEW recording)';
   document.getElementById('recTimer').classList.add('hidden');
+  setTimeout(()=>{ try{ if(!(mediaRecorder&&mediaRecorder.state==='recording')) document.getElementById('recLabel').textContent='Tap to record your meeting'; }catch(_){}} , 4000);
 }
 function fmtTimer(ms){ const s=Math.floor(ms/1000); return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0'); }
 
-async function handleRecordedFile(f) {
+async function handleRecordedFile(f, id) {
+  // SAFEGUARD v4: never accept an empty capture.
+  if (!f || !f.size) {
+    showStatus('✗ RECORDING FAILED — the audio was empty (0 bytes). Nothing was saved or overwritten. Please record again.','error');
+    return;
+  }
   selectedFile = f;
   document.getElementById('fName').textContent = f.name;
   document.getElementById('fSize').textContent = (f.size/1024/1024).toFixed(1)+' MB';
   document.getElementById('filePillWrap').classList.remove('hidden');
-  await persistAudio(f);                    // SAFEGUARD: safety copy before anything else
-  if(!getProxy()&&!getKey()){ showStatus('✓ Recording saved safely on this device. Set the Worker URL (or an AssemblyAI key) in Settings, then tap “Process Meeting”.','warn'); return; }
+  const r = await persistAudio(f, id);      // SAFEGUARD: unique-key safety copy, verified
+  curAudioKey = r && r.key;
+  if (!r || !r.ok) {
+    showStatus('⚠ SAVE PROBLEM — could not confirm the recording was stored on this device. DO NOT close the app. Tap to keep a copy now: <button class="btn btn-gold btn-sm" onclick="shareCurrentAudio()">💾 Save audio to Files</button>','error');
+    return;
+  }
+  showStatus('✓ Audio captured and saved on this device ('+(f.size/1024/1024).toFixed(1)+' MB). <button class="btn btn-gold btn-sm" onclick="shareCurrentAudio()">💾 Save a copy to Files/OneDrive</button>','success');
+  if(!getProxy()&&!getKey()){ return; }
   runPipeline();                            // SAFEGUARD: auto-process
 }
 async function onNativeAudio(e) {
@@ -754,7 +829,7 @@ async function setUploadFile(f) {
   document.getElementById('ufSize').textContent=(f.size/1024/1024).toFixed(1)+' MB';
   document.getElementById('uploadFilePill').classList.remove('hidden');
   document.getElementById('dropZone').style.opacity='0.5';
-  await persistAudio(f);                    // SAFEGUARD: safety copy of uploads too
+  { const r = await persistAudio(f); curAudioKey = r && r.key; }   // SAFEGUARD: unique-key safety copy of uploads too
 }
 function clearAudio() {
   selectedFile=null; document.getElementById('nativeAudioInput').value='';
@@ -775,10 +850,18 @@ const STEPS=['upload','transcribe','speakers','analyse','done'];
 function setStep(s) { STEPS.forEach(x=>{ const el=document.getElementById('ps-'+x),i=STEPS.indexOf(x),c=STEPS.indexOf(s); el.className=x===s?'pipe-step active':i<c?'pipe-step done':'pipe-step'; }); }
 function setProgress(p) { document.getElementById('progWrap').classList.remove('hidden'); document.getElementById('progFill').style.width=p+'%'; }
 function showStatus(html,type='info') { const el=document.getElementById('statusEl'); el.className='status-bar s-'+type; el.innerHTML=html; el.classList.remove('hidden'); }
+// Mirrors save feedback next to the Save button (the main status bar sits above the results
+// and is off-screen when you're scrolled down at the save buttons).
+function showSaveStatus(html,type='info') { const el=document.getElementById('saveStatusEl'); if(el){ el.className='status-bar s-'+type; el.innerHTML=html; el.classList.remove('hidden'); } showStatus(html,type); }
 
 async function runPipeline() {
   if(!getProxy()&&!getKey()){ showStatus('⚠ Set the Worker URL (Settings → Team Sync) or paste an AssemblyAI key first. Your recording is safe on this device meanwhile.','warn'); return; }
   if(!selectedFile){ showStatus('⚠ No audio file selected.','warn'); return; }
+  // Cloudflare Workers reject request bodies over 100 MB — catch it BEFORE uploading (129 MB failure, 2026-07-16)
+  if(getProxy() && !getKey() && selectedFile.size > 95*1024*1024){
+    showStatus('⚠ This file is '+(selectedFile.size/1024/1024).toFixed(0)+' MB — over the 100 MB team-mode upload limit. Paste an AssemblyAI key in Settings (it bypasses the limit), then tap Process again. Your recording is safe on this device meanwhile.','warn');
+    return;
+  }
 
   processing=true;
   document.getElementById('processBtn').disabled=true;
@@ -888,7 +971,11 @@ async function runPipelineFromPaste() {
 
 // ── TRANSCRIPTION BACKEND (Worker proxy preferred; direct AssemblyAI fallback) ──
 async function aaiUpload(file) {
-  const proxy=getProxy(), buf=await file.arrayBuffer();
+  // Prefer the proxy, but if the file exceeds the 100 MB Cloudflare body limit and a
+  // key is available on this device, upload directly to AssemblyAI (no size limit issue).
+  const tooBigForProxy = file.size > 95*1024*1024;
+  const proxy=(getProxy() && !(tooBigForProxy && getKey())) ? getProxy() : '';
+  const buf=await file.arrayBuffer();
   const url=proxy?proxy+'/upload':'https://api.assemblyai.com/v2/upload';
   const headers=proxy?{'content-type':'application/octet-stream'}:{authorization:getKey(),'content-type':'application/octet-stream'};
   const r=await fetch(url,{method:'POST',headers,body:buf});
@@ -988,14 +1075,14 @@ async function saveMeeting(auto){
   lastSavedId=currentMeeting.id;
   const proxy=getProxy();
   if(!proxy){
-    await clearSafety();
-    showStatus('✓ '+(auto?'Auto-saved':'Saved')+' on this device. Set the Worker URL in Settings to enable the shared team log.','success');
+    await clearSafety(curAudioKey);
+    showSaveStatus('✓ '+(auto?'Auto-saved':'Saved')+' on this device. Set the Worker URL in Settings to enable the shared team log.','success');
     return;
   }
-  showStatus('<div class="spin"></div>&nbsp; Saving to the shared team log…','info');
+  showSaveStatus('<div class="spin"></div>&nbsp; Saving to the shared team log…','info');
   const ok=await pushMeeting(slimForCloud(currentMeeting));
-  if(ok) await clearSafety();
-  showStatus(ok?('✓ '+(auto?'Auto-saved':'Saved')+' — on this device and the shared team log.'):'✓ Saved on this device, but the shared log could not be reached. A safety copy is kept and it will re-sync automatically next time the app loads.', ok?'success':'warn');
+  if(ok) await clearSafety(curAudioKey);
+  showSaveStatus(ok?('✓ '+(auto?'Auto-saved':'Saved')+' — on this device and the shared team log.'):'✓ Saved on this device, but the shared log could not be reached. A safety copy is kept and it will re-sync automatically next time the app loads.', ok?'success':'warn');
 }
 
 /* ══════════ Local store (quota-safe) + shared store (MERGE — never overwrites local-only) ══════════ */
@@ -1043,7 +1130,7 @@ function renderLog(){
   if(!all.length){el.innerHTML=`<div class="empty-state"><div class="ei">📁</div><p>No meetings saved yet.</p></div>`;return;}
   el.innerHTML=all.map(m=>{
     const open=(m.actions||[]).filter(a=>!a.done).length;
-    return `<div class="meeting-card" onclick="loadMeeting('${m.id}')"><div class="mc-head"><div class="mc-title">${m.title||m.type}</div><div style="display:flex;gap:8px;align-items:center;flex-shrink:0;"><span class="mc-date">${fmtDate(m.date)}</span><button class="btn btn-ghost btn-xs" title="Delete this meeting" onclick="event.stopPropagation();deleteMeeting('${m.id}')">🗑</button></div></div><div class="mc-summary">${(m.summary||'').substring(0,150)}…</div><div class="mc-tags"><span class="tag">${m.type}</span><span class="tag">${(m.attendees||[]).join(' · ')}</span>${open?`<span class="tag tag-open">${open} open action${open>1?'s':''}</span>`:''}</div></div>`;
+    return `<div class="meeting-card" onclick="loadMeeting('${m.id}')"><div class="mc-head"><div class="mc-title">${m.title||m.type}</div><div style="display:flex;gap:8px;align-items:center;flex-shrink:0;"><span class="mc-date">${fmtDate(m.date)}</span><button class="btn btn-ghost btn-xs" title="Executive report" onclick="event.stopPropagation();openReport('${m.id}')">📄</button><button class="btn btn-ghost btn-xs" title="Delete this meeting" onclick="event.stopPropagation();deleteMeeting('${m.id}')">🗑</button></div></div><div class="mc-summary">${(m.summary||'').substring(0,150)}…</div><div class="mc-tags"><span class="tag">${m.type}</span><span class="tag">${(m.attendees||[]).join(' · ')}</span>${open?`<span class="tag tag-open">${open} open action${open>1?'s':''}</span>`:''}</div></div>`;
   }).join('');
 }
 function loadMeeting(id){ const m=getMeetings().find(x=>x.id===id);if(!m)return;currentMeeting=m;lastSavedId=m.id;document.getElementById('mDate').value=m.date;document.getElementById('mType').value=m.type;document.getElementById('mTitle').value=m.title||'';renderResults(m);document.getElementById('resultsWrap').classList.remove('hidden');showTab('new');setTimeout(()=>document.getElementById('resultsWrap').scrollIntoView({behavior:'smooth'}),120); }
@@ -1064,6 +1151,88 @@ async function doneGlobal(mId,task){ const all=getMeetings(),m=all.find(x=>x.id=
 
 function exportCurrent(){ if(!currentMeeting)return; dlJson([currentMeeting],`TR_Meeting_${currentMeeting.date}.json`); }
 function exportAll(){ const all=getMeetings();if(!all.length){alert('No meetings yet.');return;}dlJson(all,`TR_Meetings_${today()}.json`); }
+
+/* ══════════ EXECUTIVE REPORTS (print-ready, opens in a new tab; use Print → Save as PDF) ══════════ */
+function escH(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function reportShell(title,inner){
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${escH(title)}</title><style>
+  body{font-family:Georgia,'Times New Roman',serif;color:#1a1a1a;background:#fff;max-width:820px;margin:0 auto;padding:36px 28px;line-height:1.55;}
+  .mast{font-size:26px;font-weight:700;color:#0A1C2E;letter-spacing:.02em;}
+  .mast-sub{font-size:11px;letter-spacing:.22em;color:#8C7244;text-transform:uppercase;border-bottom:2px solid #C2A05A;padding-bottom:8px;margin-bottom:18px;}
+  .meta{font-family:Calibri,Arial,sans-serif;font-size:14px;margin-bottom:6px;}
+  .meta b{color:#0A1C2E;}
+  h2{font-size:17px;color:#0A1C2E;border-bottom:1px solid #C2A05A;padding-bottom:4px;margin:26px 0 10px;}
+  p,li,td,th{font-family:Calibri,Arial,sans-serif;font-size:14px;}
+  ul{padding-left:20px;margin:6px 0;} li{margin-bottom:5px;}
+  li::marker{color:#8C7244;}
+  table{border-collapse:collapse;width:100%;margin-top:8px;}
+  th{background:#0A1C2E;color:#fff;text-align:left;padding:7px 9px;font-size:13px;}
+  td{border-bottom:1px solid #e4ddcf;padding:7px 9px;vertical-align:top;}
+  .owner-row td{background:#F4F0E8;color:#8C7244;font-weight:700;}
+  .due{color:#6E7E8F;white-space:nowrap;} .cb{font-size:16px;text-align:center;width:26px;}
+  .quote{font-style:italic;margin:8px 0 2px;} .qwho{font-size:12px;color:#8C7244;font-weight:700;text-transform:uppercase;letter-spacing:.06em;}
+  .qctx{font-size:12px;color:#6E7E8F;margin-bottom:10px;}
+  .m-block{margin-bottom:22px;padding-bottom:14px;border-bottom:1px solid #eee7d8;}
+  .foot{margin-top:30px;border-top:1px solid #C2A05A;padding-top:10px;font-size:12px;color:#6E7E8F;font-family:Calibri,Arial,sans-serif;}
+  .no-print{position:fixed;top:14px;right:14px;font-family:Calibri,Arial,sans-serif;}
+  .no-print button{background:#0A1C2E;color:#fff;border:none;border-radius:7px;padding:10px 16px;font-size:14px;cursor:pointer;}
+  @media print{.no-print{display:none;}body{padding:0;}}
+</style></head><body>
+<div class="no-print"><button onclick="window.print()">🖨 Print / Save as PDF</button></div>
+<div class="mast">THISTLE ROCK PROPERTIES</div>
+${inner}
+<div class="foot">Generated ${new Date().toLocaleString('en-GB')} · Thistle Rock Meeting Intelligence</div>
+</body></html>`;
+}
+function actionTable(actions,withSource){
+  if(!actions||!actions.length) return '<p>No action items.</p>';
+  const groups=[['Carlin',a=>/carlin/i.test(a.owner)],['Joint actions',a=>/both/i.test(a.owner)],['GMac',a=>!/carlin|both/i.test(a.owner)]];
+  let rows='';
+  for(const [label,test] of groups){
+    const items=actions.filter(test); if(!items.length) continue;
+    rows+=`<tr class="owner-row"><td></td><td>${label}</td><td></td>${withSource?'<td></td>':''}</tr>`;
+    rows+=items.map(a=>`<tr><td class="cb">${a.done?'☑':'☐'}</td><td>${escH(a.task)}</td><td class="due">${escH(a.due||'TBD')}</td>${withSource?`<td class="due">${escH(a.src||'')}</td>`:''}</tr>`).join('');
+  }
+  return `<table><tr><th></th><th>Action</th><th>Due</th>${withSource?'<th>Meeting</th>':''}</tr>${rows}</table>`;
+}
+function buildMeetingReport(m){
+  const inner=`
+<div class="mast-sub">Partner Meeting · Executive Summary</div>
+<div class="meta"><b>Meeting:</b> ${escH((m.title||m.type||'').trim())} &nbsp;&nbsp; <b>Date:</b> ${escH(fmtDate(m.date))}</div>
+<div class="meta"><b>Type:</b> ${escH(m.type||'')} &nbsp;&nbsp; <b>Attendees:</b> ${escH((m.attendees||[]).join(', '))}</div>
+<h2>Executive Summary</h2><p>${escH(m.summary||'No summary available.')}</p>
+<h2>Decisions Made</h2>${(m.decisions&&m.decisions.length)?`<ul>${m.decisions.map(d=>`<li>${escH(d)}</li>`).join('')}</ul>`:'<p>No formal decisions recorded.</p>'}
+<h2>Action Checklist</h2>${actionTable(m.actions,false)}
+${(m.properties&&m.properties.length)?`<h2>Properties Discussed</h2><ul>${m.properties.map(p=>`<li>${escH(p)}</li>`).join('')}</ul>`:''}
+${(m.quotes&&m.quotes.length)?`<h2>Notable Quotes</h2>${m.quotes.map(q=>`<div class="qwho">${escH(q.speaker)}</div><div class="quote">&ldquo;${escH(q.quote)}&rdquo;</div><div class="qctx">${escH(q.context||'')}</div>`).join('')}`:''}`;
+  return reportShell('TR Executive Summary — '+fmtDate(m.date),inner);
+}
+function buildAllReport(list){
+  const sorted=[...list].sort((a,b)=>(a.date<b.date?1:-1));
+  const openActs=[];
+  sorted.forEach(m=>(m.actions||[]).filter(a=>!a.done).forEach(a=>openActs.push({...a,src:(m.title||m.type)+' ('+fmtDate(m.date)+')'})));
+  const range=sorted.length?fmtDate(sorted[sorted.length-1].date)+' to '+fmtDate(sorted[0].date):'';
+  const inner=`
+<div class="mast-sub">All Meetings · Summary Report</div>
+<div class="meta"><b>Meetings:</b> ${sorted.length} &nbsp;&nbsp; <b>Period:</b> ${escH(range)} &nbsp;&nbsp; <b>Open actions:</b> ${openActs.length}</div>
+<h2>Open Action Items — All Meetings</h2>${actionTable(openActs,true)}
+<h2>Meeting Summaries</h2>
+${sorted.map(m=>`<div class="m-block">
+  <div class="meta" style="font-size:15px;"><b>${escH((m.title||m.type||'').trim())}</b> · ${escH(fmtDate(m.date))} · ${escH(m.type||'')}</div>
+  <p>${escH(m.summary||'No summary.')}</p>
+  ${(m.decisions&&m.decisions.length)?`<ul>${m.decisions.map(d=>`<li>${escH(d)}</li>`).join('')}</ul>`:''}
+</div>`).join('')}`;
+  return reportShell('TR All-Meetings Summary — '+today(),inner);
+}
+function openReportWindow(html){
+  const w=window.open('','_blank');
+  if(!w){ alert('Pop-up blocked — allow pop-ups for this site to open reports.'); return; }
+  w.document.write(html); w.document.close();
+}
+function openReport(id){ const m=getMeetings().find(x=>x.id===id); if(m) openReportWindow(buildMeetingReport(m)); }
+function openReportCurrent(){ if(!currentMeeting){ alert('No meeting on screen yet.'); return; } openReportWindow(buildMeetingReport(currentMeeting)); }
+function openAllReport(){ const all=getMeetings(); if(!all.length){ alert('No meetings saved yet.'); return; } openReportWindow(buildAllReport(all)); }
 function dlJson(d,n){ const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(d,null,2)],{type:'application/json'}));a.download=n;a.click(); }
 
 function resetAll(){
@@ -1080,6 +1249,7 @@ function resetAll(){
   document.getElementById('resultsWrap').classList.add('hidden');
   document.getElementById('progWrap').classList.add('hidden');
   document.getElementById('statusEl').classList.add('hidden');
+  const sv=document.getElementById('saveStatusEl'); if(sv) sv.classList.add('hidden');
   resetBtns();
   STEPS.forEach(s=>document.getElementById('ps-'+s).className='pipe-step');
 }
@@ -1099,5 +1269,3 @@ boot();
 </script>
 </body>
 </html>
-
-<a href="recover.html" id="tr-recover-btn" style="position:fixed;bottom:16px;right:16px;z-index:2147483647;background:#c0504d;color:#fff;padding:12px 18px;border-radius:24px;font-family:sans-serif;font-weight:700;font-size:14px;text-decoration:none;box-shadow:0 3px 12px rgba(0,0,0,.45)">🔎 Recover lost recording</a>
