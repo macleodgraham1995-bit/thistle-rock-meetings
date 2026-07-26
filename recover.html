@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Thistle Rock — Recording Rescue</title>
+<style>
+  :root{--gold:#c9a24b;--bg:#141414;--card:#1e1e1e;--ink:#f2efe6;--mut:#9a9488;--ok:#3f9d5a;--warn:#c98a2b;--err:#c0504d;}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 -apple-system,Segoe UI,Roboto,sans-serif;padding:18px;}
+  h1{font-size:20px;margin:0 0 2px}
+  .sub{color:var(--mut);font-size:13px;margin-bottom:16px}
+  .card{background:var(--card);border:1px solid #2c2c2c;border-radius:14px;padding:16px;margin-bottom:14px}
+  .big{width:100%;padding:16px;border:0;border-radius:12px;background:var(--gold);color:#1a1a1a;font-size:17px;font-weight:700;margin-top:10px}
+  .ghost{background:#2a2a2a;color:var(--ink)}
+  .row{display:flex;justify-content:space-between;gap:10px;font-size:14px;padding:4px 0;border-bottom:1px solid #262626}
+  .k{color:var(--mut)} .v{text-align:right;word-break:break-word}
+  .pill{display:inline-block;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:700}
+  .p-ok{background:rgba(63,157,90,.18);color:#7fd79a}
+  .p-warn{background:rgba(201,138,43,.18);color:#e0b06a}
+  .p-err{background:rgba(192,80,77,.18);color:#e58c8a}
+  pre{white-space:pre-wrap;word-break:break-word;font-size:12px;color:var(--mut);max-height:200px;overflow:auto;background:#151515;padding:10px;border-radius:8px}
+  .note{font-size:12px;color:var(--mut);margin-top:8px}
+</style>
+</head>
+<body>
+  <h1>🌿 Recording Rescue</h1>
+  <div class="sub">Reads this device's local Thistle Rock storage and lets you download any recording still saved here. Read-only — it never deletes anything.</div>
+
+  <div class="card" id="statusCard">
+    <div id="status"><span class="pill p-warn">Scanning…</span></div>
+  </div>
+
+  <div class="card" id="audioCard" style="display:none">
+    <div style="font-weight:700;margin-bottom:8px">🎙️ Unprocessed recording</div>
+    <div id="audioMeta"></div>
+    <button class="big" id="dlAudio">⬇ Download this recording</button>
+    <div class="note">Save it to <b>Files → OneDrive</b>. Once it's there it is permanently safe. Then send it to Graham/Claude to transcribe.</div>
+  </div>
+
+  <div class="card" id="draftCard" style="display:none">
+    <div style="font-weight:700;margin-bottom:8px">📝 Unsaved transcript / meeting draft</div>
+    <div id="draftMeta"></div>
+    <button class="big ghost" id="dlDraft">⬇ Download draft (JSON)</button>
+  </div>
+
+  <div class="card">
+    <div style="font-weight:700;margin-bottom:8px">🔎 Full device diagnostic</div>
+    <pre id="diag">Running…</pre>
+    <button class="big ghost" id="copyDiag">Copy diagnostic</button>
+    <div class="note">If nothing was found, this tells us <i>why</i> — and confirms whether we need to try a different way of opening the app.</div>
+  </div>
+
+<script>
+const $ = id => document.getElementById(id);
+function fmtMB(b){ return (b/1048576).toFixed(2)+' MB'; }
+function row(k,v){ return '<div class="row"><span class="k">'+k+'</span><span class="v">'+v+'</span></div>'; }
+function openDB(){ return new Promise((res,rej)=>{ const q=indexedDB.open('tr_meet_safety',1);
+  q.onsuccess=()=>res(q.result); q.onerror=()=>rej(q.error);
+  q.onupgradeneeded=()=>{ /* if it has to create it, nothing was ever stored here */ }; }); }
+function get(db,store,key){ return new Promise((res)=>{ try{ const t=db.transaction(store,'readonly').objectStore(store).get(key);
+  t.onsuccess=()=>res(t.result); t.onerror=()=>res(null);}catch(e){res(null);} }); }
+function download(blob,name){ const u=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=u; a.download=name; document.body.appendChild(a); a.click(); setTimeout(()=>{URL.revokeObjectURL(u);a.remove();},4000); }
+
+let AUDIO=null, DRAFT=null;
+
+(async () => {
+  const diag = {when:new Date().toISOString(), origin:location.origin, url:location.href,
+    standalone:(window.navigator.standalone===true)||matchMedia('(display-mode: standalone)').matches,
+    dbs:[], localStorageKeys:[], audio:null, draft:null, errors:[]};
+  try{ diag.dbs = (await indexedDB.databases?.())?.map(d=>d.name+' v'+d.version) || ['(databases() unsupported)']; }
+  catch(e){ diag.errors.push('databases(): '+e); }
+  try{ diag.localStorageKeys = Object.keys(localStorage); }catch(e){ diag.errors.push('localStorage: '+e); }
+
+  let found=false;
+  try{
+    const db = await openDB();
+    const a = await get(db,'audio','pending');
+    if(a && a.blob){
+      found=true; AUDIO=a;
+      diag.audio = {name:a.name, type:a.type, size:a.blob.size, when:a.when};
+      $('audioMeta').innerHTML = row('Size', fmtMB(a.blob.size)) + row('Recorded', a.when? new Date(a.when).toLocaleString():'unknown') + row('Type', a.type||'audio') + row('File', a.name||'recording.m4a');
+      $('audioCard').style.display='block';
+    }
+    const m = await get(db,'meeting','unsaved');
+    if(m){
+      found=true; DRAFT=m;
+      const tlen=(m.rawTranscript||'').length;
+      diag.draft = {title:m.title, date:m.date, transcriptChars:tlen};
+      $('draftMeta').innerHTML = row('Title', m.title||m.type||'Untitled') + row('Date', m.date||'?') + row('Transcript', tlen? tlen+' characters':'(none yet)');
+      $('draftCard').style.display='block';
+    }
+  }catch(e){ diag.errors.push('openDB/get: '+String(e)); }
+
+  if(found){
+    $('status').innerHTML = '<span class="pill p-ok">Recording found on this device ✓</span><div class="note">Download it below and save to Files/OneDrive right away.</div>';
+  } else {
+    const other = diag.standalone ? 'Safari (the browser)' : 'the home-screen app icon';
+    $('status').innerHTML = '<span class="pill p-err">Nothing stored in THIS context</span>'
+      + '<div class="note">This copy of the app has an empty safety slot. iPhones keep the home-screen app and Safari in <b>separate</b> storage — the recording may be in the other one. '
+      + 'You opened this in <b>'+(diag.standalone?'the home-screen app':'Safari')+'</b>; try opening this same page from <b>'+other+'</b> instead. Send the diagnostic below to Claude either way.</div>';
+  }
+  $('diag').textContent = JSON.stringify(diag,null,2);
+})();
+
+$('dlAudio').onclick=()=>{ if(AUDIO&&AUDIO.blob){ const ext=(AUDIO.name&&AUDIO.name.includes('.'))?AUDIO.name.split('.').pop():'m4a'; download(AUDIO.blob, 'TR_ONE_EYE_recovered_'+(AUDIO.when||'').slice(0,10)+'.'+ext); } };
+$('dlDraft').onclick=()=>{ if(DRAFT){ download(new Blob([JSON.stringify(DRAFT,null,2)],{type:'application/json'}), 'TR_recovered_draft.json'); } };
+$('copyDiag').onclick=async()=>{ try{ await navigator.clipboard.writeText($('diag').textContent); $('copyDiag').textContent='Copied ✓'; }catch(e){ $('copyDiag').textContent='Select the text above & copy'; } };
+</script>
+</body>
+</html>
