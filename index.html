@@ -172,6 +172,14 @@ select option { background: var(--panel); }
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 @media (max-width:520px) { .grid-2 { grid-template-columns: 1fr; } }
 
+/* ── EDIT BANNER (2026-07-29) ── */
+.edit-banner{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 12px;padding:8px 12px;
+  border:1px solid #6b5bd2;border-radius:8px;background:rgba(107,91,210,.12);font-size:13px;}
+.edit-banner.eb-dirty{border-color:#d29b5b;background:rgba(210,155,91,.14);}
+.edit-banner .eb-state{font-weight:600;color:#b9aef5;}
+.edit-banner.eb-dirty .eb-state{color:#f0c48a;}
+.edit-banner .eb-what{opacity:.8;flex:1;min-width:120px;}
+.edit-banner.hidden{display:none;}
 /* ── ATTENDEES ── */
 .attendee-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
 .chip { display: inline-flex; align-items: center; gap: 6px; background: var(--panel); border: 1px solid var(--border); border-radius: 20px; padding: 5px 12px; font-size: 13px; color: var(--light); }
@@ -293,7 +301,7 @@ select option { background: var(--panel); }
     <div class="brand-mark"><img src="data:image/png;base64,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" alt="Thistle Rock" style="width:100%;height:100%;object-fit:cover;border-radius:8px;"></div>
     <div>
       <div class="brand-name">Thistle Rock</div>
-      <div class="brand-sub">Meeting Intelligence · v3.5</div>
+      <div class="brand-sub" id="brandSub">Meeting Intelligence</div>
     </div>
   </div>
   <button class="btn btn-ghost btn-sm" onclick="exportAll()">⬇ Export</button>
@@ -303,6 +311,7 @@ select option { background: var(--panel); }
   <button class="active" onclick="showTab('new')">New Meeting</button>
   <button onclick="showTab('log')">Meeting Log</button>
   <button onclick="showTab('actions')">Action Items</button>
+  <button onclick="showTab('recordings')">Recordings</button>
   <button onclick="showTab('settings')">Settings</button>
 </nav>
 
@@ -311,7 +320,20 @@ select option { background: var(--panel); }
 <!-- ══════════ TAB: NEW MEETING ══════════ -->
 <div id="tab-new">
 
-  <div id="recoveryBar"></div>
+        <div id="editBanner" class="edit-banner hidden">
+        <span class="eb-state">Editing saved meeting</span>
+        <span class="eb-what"></span>
+        <button class="btn btn-ghost btn-xs" onclick="saveMeeting()">Save changes</button>
+        <button class="btn btn-ghost btn-xs" onclick="resetAll()">Discard</button>
+      </div>
+<!-- v3.8 (ported from One Eye, CR-322): pinned to the top of the screen so it cannot
+     be scrolled past, and one tap wide enough to hit without looking. -->
+<div id="alarmBar" class="hidden" style="position:fixed;top:0;left:0;right:0;z-index:9999;background:#b42318;color:#fff;padding:14px 16px;display:flex;align-items:center;gap:14px;box-shadow:0 4px 18px rgba(0,0,0,.45);">
+  <div style="flex:1;font-size:14px;line-height:1.45;"><b>⚠ RECORDING PROBLEM</b><br>Check the app now — the recording has stopped or is short.</div>
+  <button onclick="recAlarmStop()" style="background:#fff;color:#b42318;border:none;border-radius:8px;padding:11px 18px;font-size:14px;font-weight:600;cursor:pointer;">Dismiss</button>
+</div>
+
+<div id="recoveryBar"></div>
 
   <div class="key-bar" id="keyBar">
     <label>AssemblyAI Key</label>
@@ -324,11 +346,11 @@ select option { background: var(--panel); }
     <div class="grid-2">
       <div class="field">
         <label class="lbl">Date</label>
-        <input type="date" id="mDate" />
+        <input type="date" id="mDate" oninput="markEdited()" />
       </div>
       <div class="field">
         <label class="lbl">Meeting Type</label>
-        <select id="mType">
+        <select id="mType" onchange="markEdited()">
           <option>Weekly Partner Strategy</option>
           <option>Property Review</option>
           <option>Finance &amp; Reporting</option>
@@ -339,7 +361,7 @@ select option { background: var(--panel); }
     </div>
     <div class="field">
       <label class="lbl">Title / Focus (optional)</label>
-      <input type="text" id="mTitle" placeholder="e.g. Shawnessy acquisition, Q3 pipeline…" />
+      <input type="text" id="mTitle" oninput="markEdited()" placeholder="e.g. Shawnessy acquisition, Q3 pipeline…" />
     </div>
   </div>
 
@@ -363,6 +385,10 @@ select option { background: var(--panel); }
         Records right here in the page (allow microphone when asked).<br>
         Tap once to start → tap again to stop → the file saves and processes automatically.
       </div>
+      <!-- v3.8 (ported): a refusal has to be visible AT the button, not in a status bar further down the page -->
+      <div id="recBlockMsg" class="status-bar s-warn hidden" style="display:block;line-height:1.5;margin-top:10px;"></div>
+      <!-- v3.8 (ported): tells you whether this handset let the app hold the screen awake -->
+      <div id="recWakeNote" class="small hidden" style="margin-top:8px;text-align:center;"></div>
     </div>
     <!-- Hidden input that triggers native audio capture -->
     <input type="file" id="nativeAudioInput" accept="audio/*" capture="microphone" onchange="onNativeAudio(event)" />
@@ -484,6 +510,7 @@ select option { background: var(--panel); }
     <div class="flex gap-12 mt-16 fw">
       <button class="btn btn-primary" onclick="saveMeeting()" style="flex:1;min-width:140px;">💾 Save to Log</button>
       <button class="btn btn-ghost" onclick="openReportCurrent()">📄 Executive Report</button>
+      <button class="btn btn-ghost" onclick="exportCurrentTranscript()">⬇ Export Transcript</button>
       <button class="btn btn-ghost" onclick="exportCurrent()">⬇ Export JSON</button>
       <button class="btn btn-ghost btn-sm" onclick="resetAll()">↺ New Meeting</button>
     </div>
@@ -513,6 +540,20 @@ select option { background: var(--panel); }
 </div>
 
 <!-- ══════════ TAB: SETTINGS ══════════ -->
+<!-- ══════════ TAB: RECORDINGS (v3.8, ported from One Eye — CR-302) ══════════ -->
+<div id="tab-recordings" class="hidden">
+  <div class="card">
+    <div class="card-title">Recordings held on this device</div>
+    <div class="small" style="margin-bottom:12px;">
+      The app never deletes audio. The transcript is derived from it — if a capture was short,
+      the speaker labels are wrong, or a decision is disputed, this is the only thing that can settle it.
+      Delete a recording here once you are sure you no longer need it.
+    </div>
+    <div class="small" id="recStorage" style="margin-bottom:12px;"></div>
+    <div id="recordingsList"><div class="empty-state"><div class="ei">🎙</div><p>No recordings on this device yet.</p></div></div>
+  </div>
+</div>
+
 <div id="tab-settings" class="hidden">
   <div class="card">
     <div class="card-title">Team Sync — Cloudflare Worker</div>
@@ -551,22 +592,50 @@ select option { background: var(--panel); }
     <div class="card-title">Data</div>
     <div class="flex gap-12 fw">
       <button class="btn btn-ghost btn-sm" onclick="exportAll()">⬇ Export All Meetings</button>
+      <button class="btn btn-ghost btn-sm" onclick="document.getElementById('importInput').click()">⬆ Import Meetings</button>
+      <input type="file" id="importInput" accept=".json,application/json" style="display:none" onchange="importMeetings(event)" />
       <button class="btn btn-danger btn-sm" onclick="nukeData()">🗑 Clear Everything</button>
     </div>
+  </div>
+  <div class="card">
+    <div class="card-title">Recording Alarm</div>
+    <div class="small" style="margin-bottom:12px;">
+      If a recording stops on its own, the app sounds an alarm, speaks a warning and vibrates —
+      because a red message on a phone lying face down on the table is worth nothing.
+      An alarm nobody has heard is an alarm nobody trusts, so test it on each phone once.
+    </div>
+    <button class="btn btn-gold btn-sm" onclick="testAlarm()">🔔 Test the alarm</button>
+  </div>
+  <div class="card">
+    <div class="card-title">About This Build</div>
+    <div class="small" id="buildInfo" style="font-family:'JetBrains Mono',monospace;line-height:1.9;">…</div>
+    <div class="small" style="margin-top:10px;">Quote the version above when reporting a problem — it tells us exactly which build you are on.</div>
   </div>
 </div>
 
 </main>
 
 <script>
-const STORE='tr2_meetings', SKEY='tr2_settings', KKEY='tr2_aai_key', PKEY='tr2_proxy', ACODE='tr2_acode';
+const STORE='tr2_meetings', SKEY='tr2_settings', KKEY='tr2_aai_key', PKEY='tr2_proxy', ACODE='tr2_acode', PENDING='tr2_pending';
 // SECURITY (2a): team access code sent with every Worker call, so the shared log + transcription require the code.
 (function(){ const _f=window.fetch.bind(window); window.fetch=function(u,o){ o=o||{}; let url=''; try{ url=(typeof u==='string')?u:(u&&u.url)||''; const c=(localStorage.getItem(ACODE)||'').trim(); if(c&&url.indexOf('workers.dev')>=0){ o.headers=Object.assign({},o.headers||{},{'x-access-token':c}); } }catch(e){} const isW=url.indexOf('workers.dev')>=0; return _f(u,o).then(function(r){ try{ if(r&&r.status===401&&isW&&!window.__acodePrompting){ window.__acodePrompting=true; setTimeout(function(){ try{ var cur=localStorage.getItem(ACODE)||''; var v=prompt('🔒 Team access code required.\n\nThis app is secured for your team. Enter the access code (ask Graham if you do not have it):',cur); if(v!==null){ localStorage.setItem(ACODE,v.trim()); var f=document.getElementById('sAcode'); if(f) f.value=v.trim(); alert('Code saved — tap the button again to retry.'); } }finally{ window.__acodePrompting=false; } },30); } }catch(e){} return r; }); }; })();
-const APP_VERSION='3.3';
+/* ══════════ BUILD IDENTITY — SINGLE SOURCE OF TRUTH (2026-08-08) ══════════
+   These three constants are the ONLY place the version is written. The header and the
+   Settings tab both read from them at boot, so the app can never again claim to be a
+   version it is not. Before this, the header said v3.5 while APP_VERSION said 3.3 and the
+   local build was 3.6 — there was no reliable way to answer "what is actually running?".
+   WHEN YOU CHANGE THE CODE: bump APP_VERSION and set BUILD_DATE. Nothing else. */
+const APP_VERSION='3.8.0';
+const BUILD_DATE='2026-08-10';
+const BUILD_NOTE='recording reliability: screen wake lock, keep-alive, stall watchdog, audible alarm, capture-length check, audio kept until you delete it';
 // ── PER-APP BRANDING — the ONLY place a company name is hardcoded ──
 const APP_BRAND='Thistle Rock';       // header + report footer
 const APP_COMPANY='Thistle Rock Properties Ltd.';   // report masthead fallback
 let currentMeeting=null, selectedFile=null, attendees=['GMac','Carlin'];
+let editingSavedId=null, hasUnsavedEdits=false;   // EDIT FIX 2026-07-29
+function markEdited(){ if(!editingSavedId) return; hasUnsavedEdits=true; const b=document.getElementById('editBanner'); if(b){ b.classList.remove('hidden'); b.querySelector('.eb-state').textContent='Unsaved changes'; b.classList.add('eb-dirty'); } }
+function showEditBanner(m){ const b=document.getElementById('editBanner'); if(!b) return; hasUnsavedEdits=false; b.classList.remove('hidden','eb-dirty'); b.querySelector('.eb-what').textContent=(m.title||m.type||'meeting'); b.querySelector('.eb-state').textContent='Editing saved meeting'; }
+function hideEditBanner(){ editingSavedId=null; hasUnsavedEdits=false; const b=document.getElementById('editBanner'); if(b) b.classList.add('hidden'); }
 let processing=false, lastSavedId=null;
 let curAudioKey=null, recStopAt=0, recStopping=false, recActiveId=null, liveLastSave=0;
 var MEM=null, lastSync='';
@@ -614,11 +683,128 @@ async function dropLive(id){ try{ await IDB.del('audio','live_'+id); }catch(e){}
 async function persistDraft(m){
   try{ await IDB.put('meeting','unsaved',m); }catch(e){ console.warn('Draft safety copy failed:',e); }
 }
-// SAFEGUARD v4: clearing is SCOPED to the recording just saved — it never wipes
-// other unprocessed recordings still sitting in the safety store.
+/* ══ v3.8 — PORTED FROM ONE EYE (CR-302): THIS FUNCTION USED TO DELETE THE RECORDING.
+   It ran the moment the meeting record reached the shared log, on the reasoning that
+   once the transcript is safe the audio is spare weight. That reasoning is wrong. The
+   transcript is a derived artefact. If the capture was short, or the speaker labels are
+   wrong, or somebody disputes what was said, the audio is the only thing that can settle
+   it — and we never get to record that conversation again. On 5 August, on the One Eye
+   app, a truncated recording synced successfully and the only copy of the audio was
+   deleted a second later.
+
+   This matters more here, not less: two partners recording their own decisions have no
+   counterparty who can re-send the information. Our own 27 July recordings were filed
+   under the wrong speaker names, and the audio is the only way to correct that.
+
+   Audio is now NEVER deleted by the app. It is deleted by a person, on the Recordings
+   screen, once they have decided they do not need it. The only things cleared
+   automatically are the interim 'live_' crash mirror, once the finished file that
+   supersedes it is safely stored, and the 'unsaved' draft pointer. ═══════════════════ */
 async function clearSafety(key){
   try{ await IDB.del('meeting','unsaved'); }catch(e){}
-  if(key){ try{ await IDB.del('audio', key); }catch(e){} const base=String(key).replace(/^rec_/,''); try{ await IDB.del('audio','live_'+base); }catch(e){} }
+  if(key){
+    const base=String(key).replace(/^rec_/,'');
+    try{ const done=await IDB.get('audio',key);
+         if(done && done.blob && done.blob.size) await IDB.del('audio','live_'+base);   // mirror superseded, safe to drop
+    }catch(e){}
+  }
+}
+/* the only route by which audio leaves the device: a person choosing it */
+async function deleteRecordingForever(key){
+  const a=(window.__recAudioMap||{})[key];
+  const mb=a&&a.blob?(a.blob.size/1024/1024).toFixed(1)+' MB':'';
+  if(!confirm('Delete this recording permanently?\n\n'+mb+'\n\nThis is the only copy on this phone and it cannot be undone. The meeting notes and transcript are kept either way.')) return;
+  try{ await IDB.del('audio', key); }catch(e){}
+  renderRecordings();
+}
+/* v3.8 (ported, CR-302): audio now outlives processing, so 'still on the phone' and
+   'never processed' are no longer the same thing. The recovery banner must only shout
+   about the second. A processed recording is stamped here and shown on the Recordings
+   tab instead, quietly. */
+async function markAudioProcessed(key, m){
+  if(!key) return;
+  try{
+    const rec=await IDB.get('audio', key);
+    if(!rec) return;
+    rec.processed=true;
+    rec.meetingId=(m&&m.id)||rec.meetingId||'';
+    rec.meetingTitle=(m&&(m.title||m.type))||rec.meetingTitle||'';
+    rec.durationMs=(m&&m.durationMs)||rec.durationMs||0;
+    await IDB.put('audio', key, rec);
+  }catch(e){ console.warn('Could not stamp the recording as processed:',e); }
+}
+/* the Recordings tab: everything held on this handset, and the only delete button */
+async function renderRecordings(){
+  const el=document.getElementById('recordingsList'); if(!el) return;
+  el.innerHTML='<div class="empty-state"><div class="spin" style="margin:0 auto;"></div><p>Reading…</p></div>';
+  let list=[];
+  try{ list=await IDB.entries('audio'); }catch(e){ list=[]; }
+  const keep=(list||[]).filter(x=>x.val&&x.val.blob&&x.val.blob.size);
+  window.__recAudioMap=window.__recAudioMap||{};
+  keep.forEach(x=>{ window.__recAudioMap[x.key]=x.val; });
+  const bytes=keep.reduce((n,x)=>n+x.val.blob.size,0);
+  const st=document.getElementById('recStorage');
+  if(st) st.textContent=keep.length
+    ? (keep.length+' recording'+(keep.length===1?'':'s')+' held on this device, '+(bytes/1024/1024).toFixed(1)+' MB in total.')
+    : '';
+  if(!keep.length){ el.innerHTML='<div class="empty-state"><div class="ei">🎙</div><p>No recordings on this device yet.</p></div>'; return; }
+  keep.sort((a,b)=>String(b.val.when||'').localeCompare(String(a.val.when||'')));
+  el.innerHTML=keep.map(({key,val})=>{
+    const live=String(key).indexOf('live_')===0;
+    const mb=(val.blob.size/1024/1024).toFixed(1);
+    const when=val.when?new Date(val.when).toLocaleString():'unknown time';
+    const label=val.meetingTitle?ccEscHtml(val.meetingTitle):(live?'Interrupted capture':'Recording');
+    const state=live
+      ? '<span class="tag tag-open">interrupted, not processed</span>'
+      : (val.processed?'<span class="tag">transcribed</span>':'<span class="tag tag-open">not processed yet</span>');
+    return '<div class="meeting-card" style="cursor:default;">'
+      + '<div class="mc-head"><div class="mc-title">'+label+'</div><span class="mc-date">'+mb+' MB</span></div>'
+      + '<div class="small" style="margin:2px 0 8px;">'+when+'</div>'
+      + '<div class="mc-tags" style="margin-bottom:10px;">'+state+'</div>'
+      + '<div class="flex gap-8 fw">'
+      +   '<button class="btn btn-gold btn-sm" onclick="shareRecovered(\''+key+'\')">💾 Save to Files</button>'
+      +   (val.processed?'':'<button class="btn btn-primary btn-sm" onclick="recoverAudio(\''+key+'\')">Process now</button>')
+      +   '<button class="btn btn-ghost btn-sm" onclick="deleteRecordingForever(\''+key+'\')">Delete</button>'
+      + '</div></div>';
+  }).join('');
+}
+
+/* ══ v3.8 — PORTED FROM ONE EYE (CR-310): iOS DELETES THIS DATA ON ITS OWN AFTER 7 DAYS.
+   WebKit caps script-writable storage — IndexedDB and localStorage alike — at seven days
+   of no interaction with the site, unless the app is installed to the Home Screen or
+   storage has been granted persistence. The change above has just promised the opposite:
+   that a recording stays on the phone until a person deletes it. Left alone, that promise
+   would be broken silently, and the Recordings tab would show the same cheerful empty
+   state as a fresh install. We now ask for persistence, say so plainly if refused, and
+   keep a count so a disappearance is detected rather than presented as "nothing here". */
+async function ensureStoragePersistence(){
+  try{
+    var persisted=false;
+    if(navigator.storage && navigator.storage.persisted) persisted=await navigator.storage.persisted();
+    if(!persisted && navigator.storage && navigator.storage.persist) persisted=await navigator.storage.persist();
+    var standalone = (window.navigator.standalone === true) || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
+    if(!persisted && !standalone){
+      storageWarn('This phone may delete your recordings on its own. Safari clears app storage after about a week of not opening this app. Add it to your Home Screen (Share, then Add to Home Screen) and open it from there, and save anything important to Files or OneDrive.');
+    }
+    return persisted || standalone;
+  }catch(e){ return false; }
+}
+/* a disappearance must be detectable. If fewer recordings come back than we last counted,
+   that is eviction, and it is said out loud rather than rendered as an empty state. */
+const RCOUNT='tr2_reccount';
+async function auditRecordingCount(){
+  try{
+    const list=await IDB.entries('audio');
+    const have=(list||[]).filter(x=>x.val&&x.val.blob&&x.val.blob.size).length;
+    const expected=parseInt(ls(RCOUNT)||'0',10)||0;
+    if(have<expected){
+      showStatus('⚠ <b>'+(expected-have)+' recording'+((expected-have)===1?'':'s')+' that were on this device are gone.</b> '
+        + 'Safari clears storage after about a week of not opening the app. '
+        + 'The meeting notes and transcripts are safe in the shared log, but the audio is not recoverable from here. '
+        + 'Add the app to your Home Screen to stop this happening again.','error');
+    }
+    lss(RCOUNT,String(have));
+  }catch(e){}
 }
 async function shareBlobFile(f){
   if(!f||!f.size){ alert('No audio to save.'); return; }
@@ -643,6 +829,10 @@ async function checkRecovery(){
     for(const {key,val} of (list||[])){
       if(!val || !val.blob || !val.blob.size){ try{ await IDB.del('audio', key); }catch(e){} continue; }
       window.__recAudioMap[key]=val;
+      /* v3.8 (ported, CR-302): audio now outlives processing. A recording that has
+         already been transcribed is not a problem to be recovered — it lives on the
+         Recordings tab. Only shout about ones that were never processed. */
+      if(val.processed) continue;
       const live=String(key).indexOf('live_')===0;
       html += '<div class="status-bar s-warn" style="flex-wrap:wrap;">⚠ '+(live?'An INTERRUPTED recording':'A recording')+' from '+new Date(val.when).toLocaleString()+' ('+(val.blob.size/1024/1024).toFixed(1)+' MB) was never processed.&nbsp;<button class="btn btn-gold btn-sm" onclick="recoverAudio(\''+key+'\')">Process Now</button>&nbsp;<button class="btn btn-ghost btn-sm" onclick="shareRecovered(\''+key+'\')">Save to Files</button>&nbsp;<button class="btn btn-ghost btn-sm" onclick="discardRecovery(\'audio\',\''+key+'\')">Discard</button></div>';
     }
@@ -708,15 +898,23 @@ function boot() {
   dz.addEventListener('dragover',  e=>{e.preventDefault();dz.classList.add('over');});
   dz.addEventListener('dragleave', ()=>dz.classList.remove('over'));
   dz.addEventListener('drop', e=>{e.preventDefault();dz.classList.remove('over');const f=e.dataTransfer.files[0];if(f)setUploadFile(f);});
+  stampBuildIdentity();
+  ensureStoragePersistence();   // v3.8 (ported, CR-310): ask iOS not to evict the recordings
+  auditRecordingCount();        // v3.8 (ported, CR-310): and notice loudly if it already has
   checkRecovery();
   pullMeetings();
+  // FIX 2026-07-28: retry unsent meetings on a timer and on reconnect — not only when
+  // the Log or Actions tab happens to be opened.
+  setInterval(function(){ drainOutbox().then(function(n){ if(n) console.log('Outbox: re-sent '+n+' meeting(s) to the shared log.'); }); }, 120000);
+  window.addEventListener('online', function(){ drainOutbox(); });
 }
 
 function showTab(t) {
-  ['new','log','actions','settings'].forEach(x=>document.getElementById('tab-'+x).classList.toggle('hidden',x!==t));
-  document.querySelectorAll('nav button').forEach((b,i)=>b.classList.toggle('active',['new','log','actions','settings'][i]===t));
+  ['new','log','actions','recordings','settings'].forEach(x=>document.getElementById('tab-'+x).classList.toggle('hidden',x!==t));
+  document.querySelectorAll('nav button').forEach((b,i)=>b.classList.toggle('active',['new','log','actions','recordings','settings'][i]===t));
   if(t==='log') loadLog();
   if(t==='actions') loadActions();
+  if(t==='recordings') renderRecordings();   // v3.8 (ported, CR-302)
 }
 
 function onKeyInput()    { const v=document.getElementById('keyInput').value.trim();    lss(KKEY,v); document.getElementById('settingsKey').value=v; refreshKeyPill(); }
@@ -785,8 +983,8 @@ function renderChips() {
     return `<div class="chip ${cls}">${a}<button class="chip-remove" onclick="removeAttendee(${i})">×</button></div>`;
   }).join('');
 }
-function addAttendee() { const inp=document.getElementById('newAttendee'),v=inp.value.trim(); if(!v)return; attendees.push(v); inp.value=''; renderChips(); saveSettings(); }
-function removeAttendee(i) { attendees.splice(i,1); renderChips(); saveSettings(); }
+function addAttendee() { const inp=document.getElementById('newAttendee'),v=inp.value.trim(); if(!v)return; attendees.push(v); inp.value=''; renderChips(); if(editingSavedId){markEdited();}else{saveSettings();} }
+function removeAttendee(i) { attendees.splice(i,1); renderChips(); if(editingSavedId){markEdited();}else{saveSettings();} }
 
 // ── IN-PAGE RECORD (MediaRecorder — works on iOS Safari, Android, desktop) ──
 // History: capture="microphone" on a file input opens the CAMERA on iOS (WebKit bug),
@@ -794,8 +992,256 @@ function removeAttendee(i) { attendees.splice(i,1); renderChips(); saveSettings(
 // MediaRecorder via getUserMedia is the only reliable in-page mic recording on iPhone.
 let mediaRecorder=null, recChunks=[], recStream=null, recTimerInt=null, recStart=0;
 
+/* ══ v3.8 — PORTED FROM THE ONE EYE BUILD (CR-303), 2026-08-10 ═══════════════
+   STOP iOS SILENTLY ENDING THE RECORDING.
+
+   The fault, proven on the One Eye app on 5 August 2026: a recording was started,
+   the phone was put down and not touched again — exactly as instructed. The handset
+   auto-locked, iOS suspended the backgrounded web app, MediaRecorder stopped
+   receiving data, and the capture ended there. Because the on-screen timer is driven
+   by Date.now(), on waking it read the full meeting length, and the zero-byte trap
+   only fires at literally zero bytes. Everything looked correct: a file, a timer, a
+   transcript, a successful sync. Only the transcript's length gave it away, and only
+   to the person who had been in the room.
+
+   This app has the identical hole — same MediaRecorder path, same Date.now() timer,
+   same zero-byte-only trap. Three defences, because any one alone can be defeated:
+
+   1. A Screen Wake Lock so the display does not switch off in the first place.
+      iOS 16.4+; re-taken on resume, since iOS drops it whenever the page is hidden.
+   2. A silent looping <audio> element. An app producing audio is far less likely to
+      be suspended, and it covers handsets where the wake lock is refused.
+   3. A watchdog checking every 10 seconds that chunks are still arriving. If they
+      stop while we believe we are recording, the app stops cleanly, keeps everything
+      captured up to that moment, and says loudly what happened — rather than showing
+      a running timer over a dead stream.
+
+   Belt, braces and a smoke alarm. The first two prevent. The third guarantees that
+   if it happens anyway, nobody finds out a week later. ══════════════════════════ */
+let recWakeLock=null, recKeepAudio=null, recWatchdog=null, recLastChunkAt=0, recTruncated=false;
+
+/* ══ v3.8 — PORTED FROM ONE EYE (CR-322): AN ALARM YOU CAN ACTUALLY HEAR ══════
+   The missing half of the above. The watchdog detects a stalled capture within
+   about fifteen seconds, then writes a red message to a screen that is face down
+   on the table — which is worth nothing. Detection nobody perceives is the same
+   silent failure in a new costume. So the app makes a noise.
+
+   Two things make this work on iOS:
+   1. The AudioContext is created and resumed inside the record tap, which is a user
+      gesture. Created any later, iOS refuses to let it make a sound.
+   2. The silent keep-alive above holds the page alive in the background, so the
+      watchdog is still running to trigger this at all.
+
+   The honest limit: if iOS fully suspends the page despite the keep-alive, no
+   JavaScript runs, so nothing can sound until the app is next brought forward. It
+   alarms the moment it wakes. That is why the length check after the recording
+   stays as the final backstop, and why this is the third layer, not the only one.
+
+   Loudness is deliberate and matches the One Eye build: three harsh square-wave
+   tones, a spoken line, and vibration, repeating until dismissed. ═════════════ */
+let recAudioCtx=null, recAlarmTimer=null, recAlarmOn=false, recAlarmTicks=0, recAlarmMsg='';
+
+/* must run inside a user gesture, so it is called from the record tap */
+function recAlarmInit(){
+  try{
+    if(!recAudioCtx){ const AC=window.AudioContext||window.webkitAudioContext; if(AC) recAudioCtx=new AC(); }
+    if(recAudioCtx && recAudioCtx.state==='suspended') recAudioCtx.resume();
+  }catch(e){ console.warn('Alarm audio could not be prepared:', e); }
+  return !!recAudioCtx;
+}
+function recBeep(freq, ms, delaySec){
+  if(!recAudioCtx) return;
+  try{
+    const t0=recAudioCtx.currentTime+(delaySec||0), dur=ms/1000;
+    const osc=recAudioCtx.createOscillator(), g=recAudioCtx.createGain();
+    osc.type='square'; osc.frequency.value=freq;
+    g.gain.setValueAtTime(0.0001,t0);
+    g.gain.exponentialRampToValueAtTime(0.4,t0+0.012);
+    g.gain.exponentialRampToValueAtTime(0.0001,t0+dur);
+    osc.connect(g); g.connect(recAudioCtx.destination);
+    osc.start(t0); osc.stop(t0+dur+0.02);
+  }catch(e){}
+}
+function recAlarmPattern(){
+  recBeep(784,190,0); recBeep(988,190,0.24); recBeep(1319,260,0.48);   // three rising tones
+  try{ if(navigator.vibrate) navigator.vibrate([250,120,250,120,400]); }catch(e){}
+}
+function recSpeak(msg){
+  try{
+    if(!window.speechSynthesis) return;
+    window.speechSynthesis.cancel();
+    const u=new SpeechSynthesisUtterance(msg); u.rate=0.95; u.pitch=1; u.volume=1;
+    window.speechSynthesis.speak(u);
+  }catch(e){}
+}
+function recAlarmStart(spoken){
+  if(recAlarmOn) return;
+  recAlarmOn=true; recAlarmTicks=0; recAlarmMsg=spoken||'Recording stopped. Check the Thistle Rock app.';
+  recAlarmInit();
+  recAlarmPattern(); recSpeak(recAlarmMsg);
+  try{ const b=document.getElementById('alarmBar'); if(b) b.classList.remove('hidden'); }catch(e){}
+  recAlarmTimer=setInterval(function(){
+    recAlarmTicks++;
+    recAlarmPattern();
+    if(recAlarmTicks%3===0) recSpeak(recAlarmMsg);
+    if(recAlarmTicks>=20) recAlarmStop();          // about a minute, then stop nagging
+  },3000);
+}
+function recAlarmStop(){
+  recAlarmOn=false;
+  clearInterval(recAlarmTimer); recAlarmTimer=null;
+  try{ if(window.speechSynthesis) window.speechSynthesis.cancel(); }catch(e){}
+  try{ if(navigator.vibrate) navigator.vibrate(0); }catch(e){}
+  try{ const b=document.getElementById('alarmBar'); if(b) b.classList.add('hidden'); }catch(e){}
+}
+/* Settings has a Test button. An alarm nobody has heard is an alarm nobody trusts,
+   and it is the only way to know this handset will actually make the noise. */
+function testAlarm(){
+  if(!recAlarmInit()){ alert('This browser will not let the app generate sound. Note which phone this is and raise it with Graham.'); return; }
+  recAlarmStart('This is a test of the Thistle Rock recording alarm.');
+  setTimeout(recAlarmStop, 6500);
+}
+
+async function recAcquireWakeLock(){
+  try{
+    if('wakeLock' in navigator){
+      recWakeLock = await navigator.wakeLock.request('screen');
+      recWakeLock.addEventListener('release', function(){ recWakeLock=null; });
+      return true;
+    }
+  }catch(e){ console.warn('Wake lock refused:', e); }
+  return false;
+}
+function recReleaseWakeLock(){
+  try{ if(recWakeLock){ recWakeLock.release(); recWakeLock=null; } }catch(e){}
+}
+/* iOS drops the wake lock when the page is hidden; take it again on return */
+document.addEventListener('visibilitychange', function(){
+  if(document.visibilityState==='visible' && mediaRecorder && mediaRecorder.state==='recording') recAcquireWakeLock();
+});
+function recStartKeepAlive(){
+  try{
+    if(!recKeepAudio){
+      recKeepAudio=document.createElement('audio');
+      recKeepAudio.loop=true; recKeepAudio.setAttribute('playsinline','');
+      // 1s of silence, WAV. Inline so the app needs no network to stay awake.
+      recKeepAudio.src='data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAgD4AAAB9AAACABAAZGF0YQAAAAA=';
+      recKeepAudio.volume=0.001;
+    }
+    const pr=recKeepAudio.play(); if(pr&&pr.catch) pr.catch(function(){});
+  }catch(e){}
+}
+function recStopKeepAlive(){ try{ if(recKeepAudio) recKeepAudio.pause(); }catch(e){} }
+
+function recStartWatchdog(){
+  recLastChunkAt=Date.now();
+  clearInterval(recWatchdog);
+  recWatchdog=setInterval(function(){
+    if(!(mediaRecorder && mediaRecorder.state==='recording')) return;
+    const gap=Date.now()-recLastChunkAt;
+    if(gap>15000){                       // chunks arrive every second; 15s is dead
+      recTruncated=true;
+      clearInterval(recWatchdog); recWatchdog=null;
+      showStatus('⚠ THE RECORDING STOPPED ON ITS OWN after '+fmtTimer(recLastChunkAt-recStart)
+        +' — the phone most likely locked or the app was put in the background. '
+        +'Everything captured up to that point has been kept. Start a new recording to carry on, '
+        +'and keep the screen on this time.','error');
+      recAlarmStart('Warning. The recording has stopped. Check the Thistle Rock app now.');
+      try{ stopRecording(); }catch(e){}
+    }
+  },10000);
+}
+function recStopWatchdog(){ clearInterval(recWatchdog); recWatchdog=null; }
+
+/* ══ v3.8 — PORTED FROM ONE EYE (CR-303): MEASURE WHAT IS ACTUALLY IN THE FILE ══
+   The zero-byte trap only catches a capture that produced nothing at all. What
+   happened on 5 August is worse, because it looks like success: some audio, a
+   full-length timer, a short transcript. Decode the file and compare its real
+   duration against the time the button was held down. If they disagree materially,
+   say so before the meeting is filed, and never let it sync quietly. ═══════════ */
+function audioDuration(file){
+  return new Promise(function(res){
+    try{
+      const el=document.createElement('audio'); const u=URL.createObjectURL(file);
+      let done=false;
+      const finish=function(v){ if(done) return; done=true; try{URL.revokeObjectURL(u);}catch(e){} res(v); };
+      el.preload='metadata';
+      el.onloadedmetadata=function(){
+        // some WebKit builds report Infinity until the file is seeked
+        if(el.duration===Infinity || isNaN(el.duration)){
+          el.currentTime=1e101;
+          el.ontimeupdate=function(){ el.ontimeupdate=null; finish(isFinite(el.duration)?el.duration*1000:null); };
+          setTimeout(function(){ finish(isFinite(el.duration)?el.duration*1000:null); },3000);
+        } else finish(el.duration*1000);
+      };
+      el.onerror=function(){ finish(null); };
+      el.src=u;
+      setTimeout(function(){ finish(null); },8000);
+    }catch(e){ res(null); }
+  });
+}
+async function auditCapture(f, elapsedMs){
+  const out={ elapsedMs:elapsedMs, durationMs:null, shortfallMs:0, truncated:!!recTruncated, checked:false };
+  try{
+    const d=await audioDuration(f);
+    if(d===null || !isFinite(d)) return out;          // could not measure; do not cry wolf
+    out.durationMs=d; out.checked=true;
+    const shortfall=elapsedMs-d;
+    out.shortfallMs=shortfall;
+    // tolerate 10% or 15 seconds, whichever is larger: container padding and the
+    // final partial chunk always leave a small honest gap.
+    const tolerance=Math.max(15000, elapsedMs*0.10);
+    if(shortfall>tolerance) out.truncated=true;
+  }catch(e){}
+  return out;
+}
+function captureWarning(a){
+  if(!a || !a.truncated) return '';
+  const got=a.durationMs?fmtTimer(a.durationMs):'less than expected';
+  const ran=fmtTimer(a.elapsedMs);
+  return '<b>⚠ THIS RECORDING IS SHORTER THAN THE MEETING.</b><br>'
+    + 'The recorder ran for '+ran+' but only '+got+' of audio was captured. '
+    + 'The phone almost certainly locked or the app was backgrounded, which stops iOS recording. '
+    + '<b>The missing part of the conversation was never captured and cannot be recovered.</b><br>'
+    + 'What was captured has been kept and will still be transcribed. '
+    + 'Write up the rest from memory now, while it is fresh, and add it to the meeting notes. '
+    + 'Before the next meeting set Auto-Lock to Never and leave the screen on.';
+}
+/* proper HTML escape — the app's older esc() only escapes quotes for inline onclick */
+function ccEscHtml(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+/* ══ v3.8 — PORTED FROM ONE EYE (CR-303 / CR-314): REFUSE AT THE BUTTON ═══════
+   A refusal has to be visible AT the record button. The status bar sits further
+   down the page and was off-screen on a phone, so tapping record simply did
+   nothing with no explanation. Always returns false so callers can `return recBlock(...)`. */
+function recBlock(html, focusEl){
+  try{
+    const box=document.getElementById('recBlockMsg');
+    if(box){ box.innerHTML=html; box.classList.remove('hidden'); }
+    if(focusEl){
+      const f=(focusEl.closest && focusEl.closest('.field')) || focusEl;
+      try{ f.scrollIntoView({behavior:'smooth',block:'center'}); }catch(e){}
+      const prev=f.style.boxShadow;
+      f.style.boxShadow='0 0 0 3px rgba(200,169,110,0.75)';
+      setTimeout(function(){ f.style.boxShadow=prev||''; },2200);
+    }
+  }catch(e){}
+  return false;
+}
+function recBlockClear(){ try{ const b=document.getElementById('recBlockMsg'); if(b) b.classList.add('hidden'); }catch(e){} }
+
 async function toggleRecord() {
   if (mediaRecorder && mediaRecorder.state === 'recording') { stopRecording(); return; }
+  /* v3.8 (ported, CR-314): do not let a second recording start while the first is
+     still being transcribed. currentMeeting and curAudioKey are single globals, so
+     starting again mid-pipeline destroys the meeting in flight. */
+  if (processing) {
+    return recBlock('<b>The previous meeting is still being transcribed.</b><br>Wait for it to finish — starting now would lose it.', document.getElementById('recBtn'));
+  }
+  recBlockClear();
+  /* v3.8 (ported, CR-322): this tap is our user gesture. Prepare the alarm audio
+     now — created any later, iOS refuses to let it make a sound. */
+  recAlarmInit();
   // SAFEGUARD v4: guard against an accidental tap right after stopping — the stray
   // restart that silently overwrote a real recording. Require a deliberate confirm.
   if (recStopping || (Date.now()-recStopAt) < 4000) {
@@ -815,8 +1261,22 @@ async function toggleRecord() {
   try { mediaRecorder = new MediaRecorder(recStream, { audioBitsPerSecond: 32000 }); }
   catch(e) { mediaRecorder = new MediaRecorder(recStream); }
   recActiveId = Date.now(); liveLastSave = 0;
+  /* v3.8 (ported): if the microphone is seized or the track dies, we hear about it
+     immediately rather than at the end. */
+  try{
+    recStream.getTracks().forEach(function(t){
+      t.onended=function(){
+        if(!(mediaRecorder && mediaRecorder.state==='recording')) return;
+        recTruncated=true;
+        showStatus('⚠ THE MICROPHONE STOPPED after '+fmtTimer(Date.now()-recStart)
+          +'. Everything captured up to that point has been kept.','error');
+        recAlarmStart('Warning. The microphone has stopped. Check the Thistle Rock app now.');
+        try{ stopRecording(); }catch(e){}
+      };
+    });
+  }catch(e){}
   mediaRecorder.ondataavailable = e => {
-    if (e.data && e.data.size>0) recChunks.push(e.data);
+    if (e.data && e.data.size>0){ recChunks.push(e.data); recLastChunkAt=Date.now(); }   // v3.8: watchdog heartbeat
     if (recChunks.length && Date.now()-liveLastSave > 5000) {            // SAFEGUARD v4: live crash-mirror
       liveLastSave = Date.now();
       try { persistLive(recActiveId, new Blob(recChunks, {type:(recChunks[0]&&recChunks[0].type)||'audio/mp4'})); } catch(_){}
@@ -824,6 +1284,8 @@ async function toggleRecord() {
   };
   mediaRecorder.onstop = async () => {
     recStopping = false;
+    recStopWatchdog(); recStopKeepAlive(); recReleaseWakeLock();   // v3.8: idempotent — also covers a watchdog-initiated stop
+    const elapsedMs = Date.now() - recStart;
     if (recStream) { recStream.getTracks().forEach(t=>t.stop()); recStream=null; }
     const type = (recChunks[0] && recChunks[0].type) || 'audio/mp4';
     const blob = new Blob(recChunks, { type });
@@ -831,15 +1293,31 @@ async function toggleRecord() {
     // do NOT touch any existing recording. An empty file is never saved.
     if (!recChunks.length || !blob.size) {
       showStatus('✗ RECORDING FAILED — no audio was captured (0 bytes). Nothing was saved and nothing was overwritten. Please record again.','error');
+      recAlarmStart('Recording failed. No audio was captured. Please record again.');
       return;
     }
     const ext = type.includes('mp4') ? 'm4a' : (type.includes('ogg') ? 'ogg' : 'webm');
     const f = new File([blob], 'meeting-recording-'+today()+'-'+recActiveId+'.'+ext, { type });
     await dropLive(recActiveId);
-    await handleRecordedFile(f, recActiveId);
+    /* v3.8 (ported, CR-303): decode the file and compare its real length against the
+       time the button was held down, BEFORE it is filed or synced. */
+    const audited = await auditCapture(f, elapsedMs);
+    await handleRecordedFile(f, recActiveId, audited);
   };
   mediaRecorder.start(1000); // collect data every second so a crash loses almost nothing
   recStart = Date.now();
+  recTruncated = false;
+  recStartKeepAlive();                                            // v3.8 (ported, CR-303)
+  recStartWatchdog();                                             // v3.8 (ported, CR-303)
+  recAcquireWakeLock().then(function(got){
+    try{
+      const n=document.getElementById('recWakeNote'); if(!n) return;
+      n.className='small'; n.classList.remove('hidden');
+      n.innerHTML = got
+        ? 'Screen held awake while recording. Do not lock the phone.'
+        : '<b style="color:#d4a06a;">This phone would not let the app hold the screen awake.</b> Set Auto-Lock to Never (Settings ▸ Display &amp; Brightness) before a long meeting, and leave the screen on.';
+    }catch(e){}
+  });
   document.getElementById('recBtn').classList.add('recording');
   document.getElementById('recLabel').textContent = 'Recording… tap to stop';
   const tEl = document.getElementById('recTimer'); tEl.classList.remove('hidden');
@@ -847,6 +1325,8 @@ async function toggleRecord() {
 }
 function stopRecording() {
   recStopping = true; recStopAt = Date.now();   // SAFEGUARD v4: arm the restart cooldown
+  recStopWatchdog(); recStopKeepAlive(); recReleaseWakeLock();   // v3.8 (ported, CR-303)
+  try{ const el=document.getElementById('recWakeNote'); if(el) el.classList.add('hidden'); }catch(e){}
   if (mediaRecorder && mediaRecorder.state==='recording') mediaRecorder.stop();
   clearInterval(recTimerInt);
   document.getElementById('recBtn').classList.remove('recording');
@@ -856,7 +1336,7 @@ function stopRecording() {
 }
 function fmtTimer(ms){ const s=Math.floor(ms/1000); return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0'); }
 
-async function handleRecordedFile(f, id) {
+async function handleRecordedFile(f, id, audit) {
   // SAFEGUARD v4: never accept an empty capture.
   if (!f || !f.size) {
     showStatus('✗ RECORDING FAILED — the audio was empty (0 bytes). Nothing was saved or overwritten. Please record again.','error');
@@ -868,11 +1348,20 @@ async function handleRecordedFile(f, id) {
   document.getElementById('filePillWrap').classList.remove('hidden');
   const r = await persistAudio(f, id);      // SAFEGUARD: unique-key safety copy, verified
   curAudioKey = r && r.key;
+  window.__lastCaptureAudit = audit || null;   // v3.8: rides onto the saved meeting record
   if (!r || !r.ok) {
     showStatus('⚠ SAVE PROBLEM — could not confirm the recording was stored on this device. DO NOT close the app. Tap to keep a copy now: <button class="btn btn-gold btn-sm" onclick="shareCurrentAudio()">💾 Save audio to Files</button>','error');
     return;
   }
-  showStatus('✓ Audio captured and saved on this device ('+(f.size/1024/1024).toFixed(1)+' MB). <button class="btn btn-gold btn-sm" onclick="shareCurrentAudio()">💾 Save a copy to Files/OneDrive</button>','success');
+  /* v3.8 (ported, CR-303): a short capture must be said BEFORE the meeting is filed.
+     This is the case that otherwise looks like complete success. */
+  const warn = captureWarning(audit);
+  if (warn) {
+    showStatus(warn + '<br><button class="btn btn-gold btn-sm" onclick="shareCurrentAudio()">💾 Save the audio to Files</button>','error');
+    recAlarmStart('Warning. This recording is shorter than the meeting. Check the Thistle Rock app.');
+  } else {
+    showStatus('✓ Audio captured and saved on this device ('+(f.size/1024/1024).toFixed(1)+' MB). <button class="btn btn-gold btn-sm" onclick="shareCurrentAudio()">💾 Save a copy to Files/OneDrive</button>','success');
+  }
   if(!getProxy()&&!getKey()){ return; }
   runPipeline();                            // SAFEGUARD: auto-process
 }
@@ -1135,12 +1624,45 @@ function toggleAction(i){ if(!currentMeeting)return; currentMeeting.actions[i].d
 function toggleResult(id){ const body=document.getElementById(id),tog=document.getElementById('rtb-'+id.replace('rb-','')),open=body.classList.toggle('open'); if(tog)tog.textContent=open?'▴ collapse':'▾ expand'; }
 
 /* ══════════ SAFEGUARD: save = device + shared log; quota-safe; clears safety copies ══════════ */
+// ── EDIT FIX 2026-07-29: pull live form values into the meeting before saving.
+// Previously loadMeeting() populated the form but nothing wrote it back, so any
+// edit to date/type/title/attendees on a saved meeting was silently discarded.
+function syncFormToMeeting(){
+  if(!currentMeeting) return;
+  const d=document.getElementById('mDate').value;
+  const t=document.getElementById('mType').value;
+  const ti=document.getElementById('mTitle').value;
+  if(d)  currentMeeting.date=d;
+  if(t)  currentMeeting.type=t;
+  currentMeeting.title = ti || t || currentMeeting.title;
+  currentMeeting.attendees=[...attendees];
+  currentMeeting.editedAt=new Date().toISOString();
+}
+/* v3.8 (ported, CR-303): a short capture must not stop at the phone. It rides on the
+   meeting record, so the shared log — and anyone reading the meeting months later —
+   knows the transcript is partial rather than the meeting being brief. */
+function stampCaptureAudit(m){
+  try{
+    const a=window.__lastCaptureAudit;
+    if(!m || !a) return;
+    m.durationMs = a.durationMs || m.durationMs || 0;
+    m.capture = { elapsedMs:a.elapsedMs, durationMs:a.durationMs, shortfallMs:a.shortfallMs, checked:a.checked };
+    m.captureTruncated = !!a.truncated;
+  }catch(e){}
+}
 async function saveMeeting(auto){
   if(!currentMeeting) return;
+  syncFormToMeeting();
+  stampCaptureAudit(currentMeeting);              // v3.8 (ported, CR-303)
+  try{ await markAudioProcessed(curAudioKey, currentMeeting); }catch(e){}   // v3.8 (ported, CR-302)
   const all=getMeetings(),idx=all.findIndex(m=>m.id===currentMeeting.id);
   if(idx>=0) all[idx]=currentMeeting; else all.unshift(currentMeeting);
   setMeetings(all);
   lastSavedId=currentMeeting.id;
+  hasUnsavedEdits=false;
+  const eb=document.getElementById('editBanner');
+  if(eb&&editingSavedId){ eb.classList.remove('eb-dirty'); eb.querySelector('.eb-state').textContent='Saved'; }
+  renderLog();
   const proxy=getProxy();
   if(!proxy){
     await clearSafety(curAudioKey);
@@ -1160,30 +1682,151 @@ function slimForCloud(m){ try{ return {...m,utterances:slimUtts(m.utterances)}; 
 function getMeetings(){ return MEM?MEM:(lsj(STORE)||[]); }
 function setMeetings(arr){
   MEM=arr;
-  try{ lssj(STORE,slimForCache(arr)); }
-  catch(e){ try{ lssj(STORE,slimForCache(arr).slice(0,15)); }catch(e2){ console.warn('localStorage full — in-memory only this session'); } }
+  try{ lssj(STORE,slimForCache(arr)); return; }catch(e){}
+  // FIX 2026-07-28: device storage full. Degrade in stages and TELL the user —
+  // the old code silently dropped everything past the 15 newest with only a console.warn.
+  let kept=0;
+  for(const n of [60,30,15]){ try{ lssj(STORE,slimForCache(arr).slice(0,n)); kept=n; break; }catch(e2){} }
+  if(kept){
+    const dropped=arr.length-kept;
+    if(dropped>0) storageWarn('Device storage is full. Only the '+kept+' most recent meetings are cached on this device — '+dropped+' older one'+(dropped===1?' is':'s are')+' no longer held locally. Export a backup and clear old meetings.');
+  }else{
+    storageWarn('Device storage is full — meetings are held in memory only for this session. Export a backup BEFORE closing this app.');
+  }
 }
+/* Writes the build identity into the header and the Settings tab from the constants above,
+   so what the user sees is always what is actually running. */
+function stampBuildIdentity(){
+  try{
+    const sub=document.getElementById('brandSub');
+    if(sub) sub.textContent='Meeting Intelligence · v'+APP_VERSION;
+    const info=document.getElementById('buildInfo');
+    if(info){
+      const proxy=getProxy();
+      info.innerHTML=
+        'Version &nbsp;'+APP_VERSION+'<br>'+
+        'Built &nbsp;&nbsp;&nbsp;'+BUILD_DATE+'<br>'+
+        'Changes &nbsp;'+BUILD_NOTE+'<br>'+
+        'Sync &nbsp;&nbsp;&nbsp;&nbsp;'+(proxy?'shared team log':'DEVICE ONLY — no Worker URL set')+'<br>'+
+        'Queued &nbsp;&nbsp;'+pendingCount()+' waiting to upload';
+    }
+  }catch(e){}
+}
+
+function storageWarn(msg){
+  try{
+    let el=document.getElementById('storageWarn');
+    if(!el){
+      el=document.createElement('div'); el.id='storageWarn';
+      el.style.cssText='position:fixed;left:0;right:0;bottom:0;z-index:99999;background:#7a1f1f;color:#fff;padding:12px 16px;font:14px/1.45 system-ui,-apple-system,sans-serif;box-shadow:0 -2px 14px rgba(0,0,0,.45);cursor:pointer';
+      el.onclick=function(){ el.remove(); };
+      document.body.appendChild(el);
+    }
+    el.textContent='⚠ '+msg+'   (tap to dismiss)';
+  }catch(e){}
+  console.warn(msg);
+}
+
+/* ══════════ Durable outbox (added 2026-07-28) ══════════
+   Any meeting that fails to reach the shared log is recorded here and retried on every
+   boot, every two minutes, and whenever the device comes back online. Before this existed,
+   a failed upload was forgotten the moment the status bar was dismissed. */
+function getPending(){ const o=lsj(PENDING); return (o&&typeof o==='object'&&!Array.isArray(o))?o:{}; }
+function setPending(o){ try{ lssj(PENDING,o); }catch(e){} }
+function markPending(m){ if(!m||!m.id) return; const o=getPending(); if(!o[m.id]){ o[m.id]=Date.now(); setPending(o); } }
+function clearPending(id){ const o=getPending(); if(o[id]!==undefined){ delete o[id]; setPending(o); } }
+function pendingCount(){ return Object.keys(getPending()).length; }
+async function drainOutbox(){
+  const proxy=getProxy(); if(!proxy) return 0;
+  const ids=Object.keys(getPending()); if(!ids.length) return 0;
+  const local=getMeetings(); let sent=0;
+  for(const id of ids){
+    const m=local.find(x=>x&&String(x.id)===String(id));
+    if(!m){ clearPending(id); continue; }               // deleted locally — nothing left to send
+    if(await pushMeeting(slimForCloud(m))) sent++;
+  }
+  return sent;
+}
+
+/* Reconcile against the SMALL index (ids only, a few KB) rather than the full 6.6 MB dump.
+   The full dump is what gets truncated; the index does not, so local-only meetings are
+   still detected and queued even when the big download fails. Falls back silently on
+   older Workers that do not implement ?index=1. */
+async function reconcileAgainstIndex(){
+  const proxy=getProxy(); if(!proxy) return null;
+  try{
+    const r=await fetch(proxy+'/meetings?index=1&t='+Date.now());
+    if(!r.ok) return null;
+    const d=await r.json();
+    const items=Array.isArray(d)?d:(d&&Array.isArray(d.meetings)?d.meetings:null);
+    if(!items) return null;
+    const cloudIds={}; items.forEach(i=>{ if(i&&i.id) cloudIds[String(i.id)]=true; });
+    let queued=0;
+    for(const m of getMeetings()){
+      if(m&&m.id&&!cloudIds[String(m.id)]){ markPending(m); queued++; }
+    }
+    return {cloudCount:items.length, queued:queued};
+  }catch(e){ return null; }
+}
+
 async function pullMeetings(){
   const proxy=getProxy();
   if(!proxy){ lastSync='No Worker URL set — device-only mode.'; return getMeetings(); }
+
+  /* FIX 2026-07-28 — STEP 1: work out what the shared log is missing using the cheap index,
+     then retry unsent meetings, all BEFORE the big download is attempted.
+     Previously the re-push loop sat AFTER r.json() inside the same try block, so a truncated
+     or malformed response threw before the re-push ever ran. That disabled the self-healing
+     path precisely when it was needed, and meetings stayed device-only forever. */
+  let idx=null, healed=0;
+  try{ idx=await reconcileAgainstIndex(); }catch(e){}
+  try{ healed=await drainOutbox(); }catch(e){}
+
+  /* STEP 2: download and merge — failures are contained and cannot affect step 1. */
+  let arr=null, err='';
   try{
     const r=await fetch(proxy+'/meetings?t='+Date.now());
-    if(!r.ok){ lastSync='Shared log replied HTTP '+r.status+'.'; return getMeetings(); }
-    const arr=await r.json();
-    if(!Array.isArray(arr)){ lastSync='Shared log sent an unexpected response.'; return getMeetings(); }
-    const local=getMeetings(), byId={};
-    arr.forEach(m=>{ if(m&&m.id) byId[m.id]=m; });
-    const localOnly=local.filter(m=>m&&m.id&&!byId[m.id]);
-    localOnly.forEach(m=>byId[m.id]=m);
-    const merged=Object.values(byId).sort((a,b)=>(b.createdAt||'').localeCompare(a.createdAt||''));
-    setMeetings(merged);
-    for(const m of localOnly){ pushMeeting(slimForCloud(m)); }   // heal the cloud with local-only meetings
-    lastSync='✓ Synced '+merged.length+' meeting'+(merged.length===1?'':'s')+(localOnly.length?(' · re-synced '+localOnly.length+' from this device'):'')+'.';
-    return merged;
-  }catch(e){ lastSync='Could not reach the shared log: '+(e&&e.message?e.message:String(e)); }
-  return getMeetings();
+    if(!r.ok){ err='Shared log replied HTTP '+r.status+'.'; }
+    else{
+      const txt=await r.text();
+      try{ arr=JSON.parse(txt); }
+      catch(pe){ err='Shared log sent an INCOMPLETE response ('+txt.length.toLocaleString()+' characters — cut off mid-record). Nothing on this device was changed.'; }
+      if(arr&&!Array.isArray(arr)){ arr=null; err='Shared log sent an unexpected response.'; }
+    }
+  }catch(e){ err='Could not reach the shared log: '+(e&&e.message?e.message:String(e)); }
+
+  if(!arr){
+    const pend=pendingCount();
+    lastSync=err
+      +(idx?(' Shared log holds '+idx.cloudCount+' meeting'+(idx.cloudCount===1?'':'s')+'.'):'')
+      +(healed?(' · re-sent '+healed+' from this device.'):'')
+      +(pend?(' · ⚠ '+pend+' still waiting to upload.'):'');
+    return getMeetings();
+  }
+
+  const local=getMeetings(), byId={};
+  arr.forEach(m=>{ if(m&&m.id) byId[m.id]=m; });
+  const localOnly=local.filter(m=>m&&m.id&&!byId[m.id]);
+  localOnly.forEach(m=>byId[m.id]=m);
+  const merged=Object.values(byId).sort((a,b)=>(b.createdAt||'').localeCompare(a.createdAt||''));
+  setMeetings(merged);
+  for(const m of localOnly){ markPending(m); }          // queue, then drain — never fire-and-forget
+  let healed2=0; try{ healed2=await drainOutbox(); }catch(e){}
+  const still=pendingCount(), tot=healed+healed2;
+  lastSync='✓ Synced '+merged.length+' meeting'+(merged.length===1?'':'s')
+    +(tot?(' · re-synced '+tot+' from this device'):'')
+    +(still?(' · ⚠ '+still+' still waiting to upload'):'')+'.';
+  return merged;
 }
-async function pushMeeting(m){ const proxy=getProxy(); if(!proxy) return false; try{ const r=await fetch(proxy+'/meetings',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(m)}); return r.ok; }catch(e){ return false; } }
+async function pushMeeting(m){
+  const proxy=getProxy();
+  if(!proxy){ markPending(m); return false; }
+  try{
+    const r=await fetch(proxy+'/meetings',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(m)});
+    if(r.ok){ if(m&&m.id) clearPending(m.id); return true; }
+    markPending(m); return false;
+  }catch(e){ markPending(m); return false; }
+}
 async function pushDelete(id){ const proxy=getProxy(); if(!proxy) return false; try{ const r=await fetch(proxy+'/meetings/delete',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id})}); return r.ok; }catch(e){ return false; } }
 
 async function loadLog(){
@@ -1198,10 +1841,15 @@ function renderLog(){
   if(!all.length){el.innerHTML=`<div class="empty-state"><div class="ei">📁</div><p>No meetings saved yet.</p></div>`;return;}
   el.innerHTML=all.map(m=>{
     const open=(m.actions||[]).filter(a=>!a.done).length;
-    return `<div class="meeting-card" onclick="loadMeeting('${m.id}')"><div class="mc-head"><div class="mc-title">${m.title||m.type}</div><div style="display:flex;gap:8px;align-items:center;flex-shrink:0;"><span class="mc-date">${fmtDate(m.date)}</span><button class="btn btn-ghost btn-xs" title="Executive report" onclick="event.stopPropagation();openReport('${m.id}')">📄</button><button class="btn btn-ghost btn-xs" title="Delete this meeting" onclick="event.stopPropagation();deleteMeeting('${m.id}')">🗑</button></div></div><div class="mc-summary">${(m.summary||'').substring(0,150)}…</div><div class="mc-tags"><span class="tag">${m.type}</span><span class="tag">${(m.attendees||[]).join(' · ')}</span>${open?`<span class="tag tag-open">${open} open action${open>1?'s':''}</span>`:''}</div></div>`;
+    return `<div class="meeting-card" onclick="loadMeeting('${m.id}')"><div class="mc-head"><div class="mc-title">${m.title||m.type}</div><div style="display:flex;gap:8px;align-items:center;flex-shrink:0;"><span class="mc-date">${fmtDate(m.date)}</span><button class="btn btn-ghost btn-xs" title="Executive report" onclick="event.stopPropagation();openReport('${m.id}')">📄</button><button class="btn btn-ghost btn-xs" title="Export this meeting" onclick="event.stopPropagation();exportMeetingMenu('${m.id}')">⬇</button><button class="btn btn-ghost btn-xs" title="Delete this meeting" onclick="event.stopPropagation();deleteMeeting('${m.id}')">🗑</button></div></div><div class="mc-summary">${(m.summary||'').substring(0,150)}…</div><div class="mc-tags"><span class="tag">${m.type}</span><span class="tag">${(m.attendees||[]).join(' · ')}</span>${open?`<span class="tag tag-open">${open} open action${open>1?'s':''}</span>`:''}</div></div>`;
   }).join('');
 }
-function loadMeeting(id){ const m=getMeetings().find(x=>x.id===id);if(!m)return;currentMeeting=m;lastSavedId=m.id;document.getElementById('mDate').value=m.date;document.getElementById('mType').value=m.type;document.getElementById('mTitle').value=m.title||'';renderResults(m);document.getElementById('resultsWrap').classList.remove('hidden');showTab('new');setTimeout(()=>document.getElementById('resultsWrap').scrollIntoView({behavior:'smooth'}),120); }
+function loadMeeting(id){ const m=getMeetings().find(x=>x.id===id);if(!m)return;currentMeeting=m;lastSavedId=m.id;document.getElementById('mDate').value=m.date;document.getElementById('mType').value=m.type;document.getElementById('mTitle').value=m.title||'';
+  // EDIT FIX: restore THIS meeting's attendees into the chips (previously the chips
+  // kept showing the global default list, so edits went to Settings not the meeting)
+  if(Array.isArray(m.attendees)&&m.attendees.length){ attendees=[...m.attendees]; renderChips(); }
+  editingSavedId=m.id; showEditBanner(m);
+  renderResults(m);document.getElementById('resultsWrap').classList.remove('hidden');showTab('new');setTimeout(()=>document.getElementById('resultsWrap').scrollIntoView({behavior:'smooth'}),120); }
 async function deleteMeeting(id){
   if(!confirm('Delete this meeting permanently? This removes it for everyone on the team and cannot be undone. Consider Export All first.')) return;
   const all=getMeetings().filter(m=>m.id!==id); setMeetings(all);
@@ -1217,8 +1865,58 @@ function renderGlobalActions(){
 }
 async function doneGlobal(mId,task){ const all=getMeetings(),m=all.find(x=>x.id===mId);if(!m)return;const a=m.actions.find(x=>x.task===task);if(a)a.done=true;setMeetings(all);renderGlobalActions(); await pushMeeting(slimForCloud(m)); }
 
+
+/* ── IMPORT MEETINGS — restored 2026-07-29.
+   Present in v3.1, lost in the v3.3+ rebuild. Needed to reload an exported log
+   or merge a colleague's meetings back in. */
+function importMeetings(e){
+  const f=e.target.files[0]; if(!f) return;
+  const r=new FileReader();
+  r.onload=async ()=>{
+    let data; try{ data=JSON.parse(r.result); }catch(err){ alert('That file is not valid JSON.'); return; }
+    const incoming=Array.isArray(data)?data:[data];
+    const valid=incoming.filter(m=>m&&m.id&&(m.utterances||m.rawTranscript));
+    if(!valid.length){ alert('No meetings found in that file.'); e.target.value=''; return; }
+    const all=getMeetings(); const byId={}; all.forEach(m=>byId[m.id]=m);
+    let added=0,updated=0;
+    valid.forEach(m=>{ if(byId[m.id]) updated++; else added++; byId[m.id]=m; });
+    const merged=Object.values(byId).sort((a,b)=>(b.createdAt||'').localeCompare(a.createdAt||''));
+    setMeetings(merged); e.target.value='';
+    for(const m of valid){ try{ await pushMeeting(m); }catch(err){ markPending&&markPending(m.id); } }
+    try{ await pullMeetings(); }catch(err){}
+    renderLog();
+    alert('Imported '+added+' new meeting'+(added===1?'':'s')+(updated?(', updated '+updated):'')+'. The log now holds '+getMeetings().length+'.');
+  };
+  r.readAsText(f);
+}
 function exportCurrent(){ if(!currentMeeting)return; dlJson([currentMeeting],`TR_Meeting_${currentMeeting.date}.json`); }
 function exportAll(){ const all=getMeetings();if(!all.length){alert('No meetings yet.');return;}dlJson(all,`TR_Meetings_${today()}.json`); }
+
+/* ── PER-MEETING EXPORT (2026-07-29) ──
+   Previously only "Export All" existed, so a single transcript could not be sent
+   to anyone without shipping the entire log. */
+function slugify(x){ return String(x||'meeting').replace(/[^A-Za-z0-9]+/g,'_').replace(/^_+|_+$/g,'').substring(0,48)||'meeting'; }
+function meetingById(id){ return getMeetings().find(m=>m.id===id); }
+function dlText(txt,name,mime){ const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([txt],{type:mime||'text/plain;charset=utf-8'}));a.download=name;a.click(); }
+function transcriptText(m){
+  const head=[`${m.title||m.type}`,`Date: ${fmtDate(m.date)}`,`Type: ${m.type||''}`,
+              `Attendees: ${(m.attendees||[]).join(', ')}`,''.padEnd(60,'-'),''].join('\n');
+  let body='';
+  if(Array.isArray(m.utterances)&&m.utterances.length){
+    body=m.utterances.map(u=>`[${u.speakerName||u.speaker||'?'}]: ${u.text||''}`).join('\n\n');
+  } else { body=m.rawTranscript||'(no transcript stored for this meeting)'; }
+  return head+body+'\n';
+}
+function exportMeetingJSON(id){ const m=meetingById(id); if(!m) return; dlJson([m],`TR_${m.date}_${slugify(m.title||m.type)}.json`); }
+function exportMeetingTranscript(id){ const m=meetingById(id); if(!m) return; dlText(transcriptText(m),`TR_${m.date}_${slugify(m.title||m.type)}_transcript.txt`); }
+function exportMeetingMenu(id){
+  const m=meetingById(id); if(!m) return;
+  const c=prompt(`Export "${m.title||m.type}" (${fmtDate(m.date)})\n\n1 = Transcript (.txt)\n2 = Full meeting data (.json)\n3 = Both\n\nEnter 1, 2 or 3:`,'1');
+  if(c===null) return;
+  if(c==='1'||c==='3') exportMeetingTranscript(id);
+  if(c==='2'||c==='3') exportMeetingJSON(id);
+}
+function exportCurrentTranscript(){ if(!currentMeeting){alert('No meeting loaded.');return;} dlText(transcriptText(currentMeeting),`TR_${currentMeeting.date}_${slugify(currentMeeting.title||currentMeeting.type)}_transcript.txt`); }
 
 /* ══════════ EXECUTIVE REPORTS (print-ready, opens in a new tab; use Print → Save as PDF) ══════════ */
 function escH(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
@@ -1305,7 +2003,7 @@ function dlJson(d,n){ const a=document.createElement('a');a.href=URL.createObjec
 
 function resetAll(){
   if(isDirty()&&!confirm('The current meeting has not finished saving. Start a new one anyway?')) return;
-  currentMeeting=null;selectedFile=null;
+  currentMeeting=null;selectedFile=null;hideEditBanner();
   document.getElementById('nativeAudioInput').value='';
   document.getElementById('audioInput').value='';
   document.getElementById('filePillWrap').classList.add('hidden');
