@@ -333,6 +333,15 @@ select option { background: var(--panel); }
   <button onclick="recAlarmStop()" style="background:#fff;color:#b42318;border:none;border-radius:8px;padding:11px 18px;font-size:14px;font-weight:600;cursor:pointer;">Dismiss</button>
 </div>
 
+<!-- v3.9.1: shown when this device is running an older build than the one on the server.
+     Added because v3.9.0 was deployed and confirmed live while the phone quietly carried
+     on running v3.8.0 - the same "you cannot tell what you are running" problem that let a
+     stale build sit through the 12 August meeting. -->
+<div id="updateBar" class="hidden" style="background:#8a6100;color:#fff;border-radius:8px;padding:12px 14px;margin-bottom:12px;display:flex;align-items:center;gap:12px;line-height:1.45;">
+  <div style="flex:1;font-size:13px;" id="updateMsg"></div>
+  <button class="btn btn-gold btn-sm" onclick="applyUpdate()">Update now</button>
+</div>
+
 <div id="recoveryBar"></div>
 
   <div class="key-bar" id="keyBar">
@@ -610,6 +619,7 @@ select option { background: var(--panel); }
   <div class="card">
     <div class="card-title">About This Build</div>
     <div class="small" id="buildInfo" style="font-family:'JetBrains Mono',monospace;line-height:1.9;">…</div>
+    <button class="btn btn-ghost btn-sm" style="margin-top:10px;" onclick="checkForUpdate(true)">Check for updates</button>
     <div class="small" style="margin-top:10px;">Quote the version above when reporting a problem — it tells us exactly which build you are on.</div>
   </div>
 </div>
@@ -626,9 +636,9 @@ const STORE='tr2_meetings', SKEY='tr2_settings', KKEY='tr2_aai_key', PKEY='tr2_p
    version it is not. Before this, the header said v3.5 while APP_VERSION said 3.3 and the
    local build was 3.6 — there was no reliable way to answer "what is actually running?".
    WHEN YOU CHANGE THE CODE: bump APP_VERSION and set BUILD_DATE. Nothing else. */
-const APP_VERSION='3.9.0';
+const APP_VERSION='3.9.1';
 const BUILD_DATE='2026-08-12';
-const BUILD_NOTE='recovery fixes only: re-run analysis on any saved meeting, re-process any recording, reprocessing no longer duplicates. Recording behaviour UNCHANGED from v3.8.0.';
+const BUILD_NOTE='recovery fixes + update check: the app now tells you when this phone is running an older build than the one published. Recording behaviour UNCHANGED from v3.8.0.';
 // ── PER-APP BRANDING — the ONLY place a company name is hardcoded ──
 const APP_BRAND='Thistle Rock';       // header + report footer
 const APP_COMPANY='Thistle Rock Properties Ltd.';   // report masthead fallback
@@ -939,6 +949,11 @@ function boot() {
   dz.addEventListener('dragleave', ()=>dz.classList.remove('over'));
   dz.addEventListener('drop', e=>{e.preventDefault();dz.classList.remove('over');const f=e.dataTransfer.files[0];if(f)setUploadFile(f);});
   stampBuildIdentity();
+  /* v3.9.1: strip the cache-busting marker so it does not accumulate, then ask the
+     server whether this phone is actually running the published build. */
+  try{ if(location.search){ history.replaceState(null,'',location.pathname); } }catch(e){}
+  checkForUpdate(false);
+  setInterval(function(){ checkForUpdate(false); }, 30*60*1000);
   ensureStoragePersistence();   // v3.8 (ported, CR-310): ask iOS not to evict the recordings
   auditRecordingCount();        // v3.8 (ported, CR-310): and notice loudly if it already has
   checkRecovery();
@@ -1807,6 +1822,52 @@ function setMeetings(arr){
 }
 /* Writes the build identity into the header and the Settings tab from the constants above,
    so what the user sees is always what is actually running. */
+/* ══ v3.9.1: DOES THIS PHONE HAVE THE CURRENT BUILD? ═══════════════════════════
+   On 12 August a build was deployed, the deploy tool confirmed it live on the server,
+   and the phone carried on running the previous one because iOS had cached it. There
+   was no way to know without asking someone to read a version number out. That is the
+   same class of failure as the 11-day stale build in August: the app cannot tell you
+   what it is, so nobody finds out until something is lost.
+
+   The app now asks the server what version is published, compares it to itself, and
+   says so plainly. It fetches its own page with a cache-busting query and no-store,
+   which is what defeats the iOS standalone cache. Fails silently when offline. */
+const VERKEY='tr2_lastvercheck';
+let liveVersionSeen=null;
+async function checkForUpdate(manual){
+  try{
+    const url=location.pathname+'?vercheck='+Date.now();
+    const r=await fetch(url,{cache:'no-store'});
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    const t=await r.text();
+    const m=/const\s+APP_VERSION\s*=\s*'([^']+)'/.exec(t);
+    if(!m) throw new Error('could not read the published version');
+    liveVersionSeen=m[1];
+    try{ lss(VERKEY,new Date().toISOString()); }catch(e){}
+    const bar=document.getElementById('updateBar'), msg=document.getElementById('updateMsg');
+    if(liveVersionSeen!==APP_VERSION){
+      if(msg) msg.innerHTML='<b>This phone is running an old version.</b><br>You are on v'+APP_VERSION
+        +'. v'+liveVersionSeen+' is published. Tap Update to load it.';
+      if(bar) bar.classList.remove('hidden');
+    }else{
+      if(bar) bar.classList.add('hidden');
+      if(manual) showStatus('✓ You are on the current version (v'+APP_VERSION+').','success');
+    }
+    stampBuildIdentity();
+    return liveVersionSeen;
+  }catch(e){
+    if(manual) showStatus('Could not check for updates: '+(e&&e.message?e.message:'no connection')
+      +'. You are running v'+APP_VERSION+'.','warn');
+    return null;
+  }
+}
+/* Reload past the cache. A changed URL is the only thing an iOS standalone web app
+   reliably treats as a new document. The marker is stripped again on the way back in. */
+function applyUpdate(){
+  try{ location.replace(location.pathname+'?u='+Date.now()); }
+  catch(e){ location.reload(); }
+}
+
 function stampBuildIdentity(){
   try{
     const sub=document.getElementById('brandSub');
@@ -1819,7 +1880,11 @@ function stampBuildIdentity(){
         'Built &nbsp;&nbsp;&nbsp;'+BUILD_DATE+'<br>'+
         'Changes &nbsp;'+BUILD_NOTE+'<br>'+
         'Sync &nbsp;&nbsp;&nbsp;&nbsp;'+(proxy?'shared team log':'DEVICE ONLY — no Worker URL set')+'<br>'+
-        'Queued &nbsp;&nbsp;'+pendingCount()+' waiting to upload';
+        'Queued &nbsp;&nbsp;'+pendingCount()+' waiting to upload<br>'+
+        'Published '+(liveVersionSeen
+            ? (liveVersionSeen===APP_VERSION ? liveVersionSeen+' — you are up to date'
+                                             : '<b style="color:#d4a06a;">'+liveVersionSeen+' — THIS PHONE IS BEHIND</b>')
+            : 'not checked yet');
     }
   }catch(e){}
 }
