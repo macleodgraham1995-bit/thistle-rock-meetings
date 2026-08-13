@@ -509,6 +509,7 @@ select option { background: var(--panel); }
 
     <div class="flex gap-12 mt-16 fw">
       <button class="btn btn-primary" onclick="saveMeeting()" style="flex:1;min-width:140px;">💾 Save to Log</button>
+      <button class="btn btn-gold" id="reanalyseBtn" onclick="reanalyseCurrent()">↻ Re-run analysis</button>
       <button class="btn btn-ghost" onclick="openReportCurrent()">📄 Executive Report</button>
       <button class="btn btn-ghost" onclick="exportCurrentTranscript()">⬇ Export Transcript</button>
       <button class="btn btn-ghost" onclick="exportCurrent()">⬇ Export JSON</button>
@@ -625,14 +626,50 @@ const STORE='tr2_meetings', SKEY='tr2_settings', KKEY='tr2_aai_key', PKEY='tr2_p
    version it is not. Before this, the header said v3.5 while APP_VERSION said 3.3 and the
    local build was 3.6 — there was no reliable way to answer "what is actually running?".
    WHEN YOU CHANGE THE CODE: bump APP_VERSION and set BUILD_DATE. Nothing else. */
-const APP_VERSION='3.8.0';
-const BUILD_DATE='2026-08-10';
-const BUILD_NOTE='recording reliability: screen wake lock, keep-alive, stall watchdog, audible alarm, capture-length check, audio kept until you delete it';
+const APP_VERSION='3.9.0';
+const BUILD_DATE='2026-08-12';
+const BUILD_NOTE='recovery fixes only: re-run analysis on any saved meeting, re-process any recording, reprocessing no longer duplicates. Recording behaviour UNCHANGED from v3.8.0.';
 // ── PER-APP BRANDING — the ONLY place a company name is hardcoded ──
 const APP_BRAND='Thistle Rock';       // header + report footer
 const APP_COMPANY='Thistle Rock Properties Ltd.';   // report masthead fallback
 let currentMeeting=null, selectedFile=null, attendees=['GMac','Carlin'];
 let editingSavedId=null, hasUnsavedEdits=false;   // EDIT FIX 2026-07-29
+
+/* ══ DUPLICATE FIX 2026-08-12 ═════════════════════════════════════════════════
+   Opening a meeting from the log and pressing Process produced a SECOND meeting
+   instead of updating the one you opened. loadMeeting() sets currentMeeting and
+   editingSavedId, but runPipeline() then overwrote currentMeeting with a fresh
+   object carrying id:Date.now() - a new identity - so the save created a new
+   record and pushed it to the shared team log alongside the original.
+
+   This is what produced the pair on 12 August: the 10:07 and 10:11 records are
+   ONE recording of 40:18, processed twice, and it inflated the apparent meeting
+   count for that morning. Same cause for any "duplicate meetings" after a retry.
+
+   A reprocess now REPLACES the meeting it came from: same id, original createdAt
+   kept, a reprocessedAt stamp added so the history is visible. */
+let reprocessTargetId=null;
+function meetingIdForRun(){
+  if(reprocessTargetId) return reprocessTargetId;
+  if(editingSavedId)    return editingSavedId;
+  return Date.now().toString();
+}
+function carryOverMeta(m){
+  const id=m.id;
+  const prev=getMeetings().find(function(x){ return x&&x.id===id; });
+  if(prev){
+    m.createdAt = prev.createdAt || m.createdAt;      // keep when the meeting actually happened
+    m.reprocessedAt = new Date().toISOString();
+    if(prev.actions&&prev.actions.length&&m.actions){
+      // preserve ticked-off actions across a reprocess
+      const done={}; prev.actions.forEach(function(a){ if(a&&a.done&&a.task) done[a.task]=true; });
+      m.actions.forEach(function(a){ if(a&&done[a.task]) a.done=true; });
+    }
+  }
+  return m;
+}
+function clearReprocessTarget(){ reprocessTargetId=null; }
+
 function markEdited(){ if(!editingSavedId) return; hasUnsavedEdits=true; const b=document.getElementById('editBanner'); if(b){ b.classList.remove('hidden'); b.querySelector('.eb-state').textContent='Unsaved changes'; b.classList.add('eb-dirty'); } }
 function showEditBanner(m){ const b=document.getElementById('editBanner'); if(!b) return; hasUnsavedEdits=false; b.classList.remove('hidden','eb-dirty'); b.querySelector('.eb-what').textContent=(m.title||m.type||'meeting'); b.querySelector('.eb-state').textContent='Editing saved meeting'; }
 function hideEditBanner(){ editingSavedId=null; hasUnsavedEdits=false; const b=document.getElementById('editBanner'); if(b) b.classList.add('hidden'); }
@@ -763,7 +800,8 @@ async function renderRecordings(){
       + '<div class="mc-tags" style="margin-bottom:10px;">'+state+'</div>'
       + '<div class="flex gap-8 fw">'
       +   '<button class="btn btn-gold btn-sm" onclick="shareRecovered(\''+key+'\')">💾 Save to Files</button>'
-      +   (val.processed?'':'<button class="btn btn-primary btn-sm" onclick="recoverAudio(\''+key+'\')">Process now</button>')
+      +   '<button class="btn btn-primary btn-sm" onclick="recoverAudio(\''+key+'\')">'
+      +     (val.processed?'\u21bb Re-process':'Process now')+'</button>'
       +   '<button class="btn btn-ghost btn-sm" onclick="deleteRecordingForever(\''+key+'\')">Delete</button>'
       + '</div></div>';
   }).join('');
@@ -847,7 +885,9 @@ function restoreMeeting(){
 }
 function recoverAudio(key){
   const a=(window.__recAudioMap||{})[key]; if(!a) return;
+  if(a.processed && !confirm('Re-process this recording?\n\nIt will be transcribed and analysed again, and the meeting it belongs to will be UPDATED - not duplicated.')) return;
   curAudioKey=key;
+  reprocessTargetId=(a.meetingId||null)||(editingSavedId||null);
   selectedFile=new File([a.blob],a.name||'recovered-recording.m4a',{type:a.type||'audio/mp4'});
   document.getElementById('fName').textContent=selectedFile.name;
   document.getElementById('fSize').textContent=(selectedFile.size/1024/1024).toFixed(1)+' MB';
@@ -1304,6 +1344,7 @@ async function toggleRecord() {
     const audited = await auditCapture(f, elapsedMs);
     await handleRecordedFile(f, recActiveId, audited);
   };
+  clearReprocessTarget();   // DUPLICATE FIX: a new recording is a NEW meeting
   mediaRecorder.start(1000); // collect data every second so a crash loses almost nothing
   recStart = Date.now();
   recTruncated = false;
@@ -1444,7 +1485,7 @@ async function runPipeline() {
   // SAFEGUARD: checkpoint the transcript BEFORE analysis — if anything dies from here on,
   // the full transcript is recoverable from this device.
   await persistDraft({
-    id:Date.now().toString(), date:document.getElementById('mDate').value,
+    id:meetingIdForRun(), date:document.getElementById('mDate').value,
     type:document.getElementById('mType').value,
     title:document.getElementById('mTitle').value||document.getElementById('mType').value,
     attendees:[...attendees], utterances:slimUtts(utterances), rawTranscript,
@@ -1461,7 +1502,7 @@ async function runPipeline() {
   setStep('done'); setProgress(100);
 
   currentMeeting={
-    id:Date.now().toString(),
+    id:meetingIdForRun(),
     date:document.getElementById('mDate').value,
     type:document.getElementById('mType').value,
     title:document.getElementById('mTitle').value||document.getElementById('mType').value,
@@ -1473,6 +1514,7 @@ async function runPipeline() {
   };
   await persistDraft(currentMeeting);       // SAFEGUARD: full draft checkpoint
 
+  carryOverMeta(currentMeeting);
   renderResults(currentMeeting);
   document.getElementById('resultsWrap').classList.remove('hidden');
   resetBtns();
@@ -1501,7 +1543,7 @@ async function runPipelineFromPaste() {
   catch { analysis=fallbackAnalysis(); }
   setStep('done'); setProgress(100);
   currentMeeting={
-    id:Date.now().toString(), date:document.getElementById('mDate').value,
+    id:meetingIdForRun(), date:document.getElementById('mDate').value,
     type:document.getElementById('mType').value,
     title:document.getElementById('mTitle').value||document.getElementById('mType').value,
     attendees:[...attendees], utterances, rawTranscript:paste,
@@ -1511,6 +1553,7 @@ async function runPipelineFromPaste() {
     createdAt:new Date().toISOString(),
   };
   await persistDraft(currentMeeting);
+  carryOverMeta(currentMeeting);
   renderResults(currentMeeting);
   document.getElementById('resultsWrap').classList.remove('hidden');
   processing=false;
@@ -1556,12 +1599,43 @@ async function aaiPoll(id,onProg) {
   throw new Error('Timed out waiting for the transcript');
 }
 // Robust: extract the JSON object even if the model wraps it in prose or fences.
-function parseAnalysis(raw){
+function parseAnalysis(raw, diag){
   let t=(raw||'').replace(/```json|```/g,'').trim();
+  if(!t){
+    const d=diag||{};
+    throw new Error('The analysis came back EMPTY'
+      + (d.block_types?(' — the model returned block types: '+JSON.stringify(d.block_types)):'')
+      + (d.stop_reason?(', stop reason "'+d.stop_reason+'"'):'')
+      + '. Nothing was there to parse.');
+  }
   try{ return JSON.parse(t); }catch(e){}
   const i=t.indexOf('{'), j=t.lastIndexOf('}');
   if(i>=0 && j>i){ try{ return JSON.parse(t.slice(i,j+1)); }catch(e){} }
-  throw new Error('Analysis response was not valid JSON');
+  // Repair a truncated object: close any open string, then balance the braces.
+  if(i>=0){
+    /* Track WHICH bracket is open, not just how many. Closing an open array with
+       the wrong closing character produces invalid JSON, so a stack is
+       required, unwound in reverse. */
+    let s=t.slice(i), inStr=false, esc=false, stack=[], out='';
+    for(const c of s){
+      out+=c;
+      if(esc){ esc=false; continue; }
+      if(c==='\\'){ esc=true; continue; }
+      if(c==='"'){ inStr=!inStr; continue; }
+      if(inStr) continue;
+      if(c==='{'||c==='[') stack.push(c);
+      else if(c==='}'||c===']') stack.pop();
+    }
+    if(inStr) out+='"';
+    // drop a dangling comma or a half-written key before closing
+    out=out.replace(/,\s*$/,'').replace(/,\s*"[^"]*$/,'');
+    while(stack.length) out += (stack.pop()==='{' ? '}' : ']');
+    try{ const o=JSON.parse(out); o.__repaired=true; return o; }catch(e){}
+  }
+  const d=diag||{};
+  throw new Error('The analysis reply was not valid JSON'
+    + (d.stop_reason==='max_tokens'?' - it was CUT OFF at the model output limit':'')
+    + '. Received '+t.length+' characters starting: '+t.slice(0,120));
 }
 async function analyzeTranscript(transcript,s) {
   const company=(s&&s.company)||'Thistle Rock Properties Ltd.';
@@ -1573,7 +1647,8 @@ async function analyzeTranscript(transcript,s) {
     if(!r.ok){ let msg='Analyze HTTP '+r.status; try{ const d=await r.json(); if(d.error) msg=d.error; }catch(e){} throw new Error(msg); }
     const d=await r.json(); if(d.error) throw new Error(d.error);
     const text=(d.choices&&d.choices[0]&&d.choices[0].message&&d.choices[0].message.content)||'';
-    return parseAnalysis(text);
+    try{ if(d._diag) console.log('analyze diagnostics:', JSON.stringify(d._diag)); }catch(e){}
+    return parseAnalysis(text, d._diag);
   }
   const r=await fetch('https://api.assemblyai.com/lemur/v3/apply-task',{method:'POST',headers:{authorization:getKey(),'content-type':'application/json'},body:JSON.stringify({input_text:transcript,task:prompt,final_model:'anthropic/claude-3-5-sonnet',max_output_size:2000})});
   if(!r.ok) throw new Error('LeMUR HTTP '+r.status);
@@ -1581,6 +1656,42 @@ async function analyzeTranscript(transcript,s) {
   return parseAnalysis(d.response||'');
 }
 function fallbackAnalysis(){ return {summary:'Transcript captured. AI analysis was unavailable — the transcript itself is saved.',decisions:[],actions:[],properties:[],quotes:[]}; }
+
+async function reanalyseCurrent(){
+  if(!currentMeeting){ showStatus('Open a meeting from the log first.','warn'); return; }
+  const t=currentMeeting.rawTranscript||'';
+  if(t.length<40){ showStatus('There is no transcript on this meeting to analyse.','warn'); return; }
+  if(processing){ showStatus('Something else is still processing — wait for it to finish.','warn'); return; }
+  const had=(currentMeeting.decisions||[]).length+(currentMeeting.actions||[]).length;
+  if(had && !confirm('Re-run the analysis on this meeting?\n\nIt currently has '+(currentMeeting.decisions||[]).length
+      +' decision(s) and '+(currentMeeting.actions||[]).length+' action(s). These will be replaced.\n\nThe transcript is not touched.')) return;
+
+  const btn=document.getElementById('reanalyseBtn');
+  processing=true; if(btn){ btn.disabled=true; btn.textContent='Analysing…'; }
+  showStatus('<div class="spin"></div>&nbsp; Re-running the analysis on '+t.length.toLocaleString()+' characters…','info');
+  try{
+    const s=lsj(SKEY)||{};
+    const a=await analyzeTranscript(t,s);
+    currentMeeting.summary   = a.summary||'';
+    currentMeeting.decisions = a.decisions||[];
+    currentMeeting.properties= a.properties||[];
+    currentMeeting.quotes    = a.quotes||[];
+    /* keep anything already ticked off */
+    const done={}; (currentMeeting.actions||[]).forEach(function(x){ if(x&&x.done&&x.task) done[x.task]=true; });
+    currentMeeting.actions=(a.actions||[]).map(function(x){ return Object.assign({},x,{done:!!done[x.task]}); });
+    currentMeeting.reanalysedAt=new Date().toISOString();
+    renderResults(currentMeeting);
+    showStatus('✓ Analysis re-run — '+currentMeeting.decisions.length+' decision(s) and '
+      +currentMeeting.actions.length+' action(s) extracted. Saving…','success');
+    await saveMeeting(true);        // updates in place: same id, no duplicate
+  }catch(e){
+    showStatus('✗ The analysis failed again: '+(e&&e.message?e.message:'unknown error')
+      +'<br>The transcript is untouched and still saved.','error');
+  }finally{
+    processing=false; if(btn){ btn.disabled=false; btn.textContent='↻ Re-run analysis'; }
+  }
+}
+
 
 function buildSpeakerMap(utterances,s){
   const map={},counts={};
@@ -1848,7 +1959,7 @@ function loadMeeting(id){ const m=getMeetings().find(x=>x.id===id);if(!m)return;
   // EDIT FIX: restore THIS meeting's attendees into the chips (previously the chips
   // kept showing the global default list, so edits went to Settings not the meeting)
   if(Array.isArray(m.attendees)&&m.attendees.length){ attendees=[...m.attendees]; renderChips(); }
-  editingSavedId=m.id; showEditBanner(m);
+  editingSavedId=m.id; reprocessTargetId=m.id; showEditBanner(m);
   renderResults(m);document.getElementById('resultsWrap').classList.remove('hidden');showTab('new');setTimeout(()=>document.getElementById('resultsWrap').scrollIntoView({behavior:'smooth'}),120); }
 async function deleteMeeting(id){
   if(!confirm('Delete this meeting permanently? This removes it for everyone on the team and cannot be undone. Consider Export All first.')) return;
@@ -2003,7 +2114,7 @@ function dlJson(d,n){ const a=document.createElement('a');a.href=URL.createObjec
 
 function resetAll(){
   if(isDirty()&&!confirm('The current meeting has not finished saving. Start a new one anyway?')) return;
-  currentMeeting=null;selectedFile=null;hideEditBanner();
+  currentMeeting=null;selectedFile=null;hideEditBanner();clearReprocessTarget();
   document.getElementById('nativeAudioInput').value='';
   document.getElementById('audioInput').value='';
   document.getElementById('filePillWrap').classList.add('hidden');
