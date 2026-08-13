@@ -516,9 +516,17 @@ select option { background: var(--panel); }
       </div>
     </div>
 
+    <!-- v3.9.2: speaker relabelling panel -->
+    <div id="relabelPanel" class="hidden card" style="margin-top:14px;border-color:var(--gold);"></div>
+
     <div class="flex gap-12 mt-16 fw">
       <button class="btn btn-primary" onclick="saveMeeting()" style="flex:1;min-width:140px;">💾 Save to Log</button>
       <button class="btn btn-gold" id="reanalyseBtn" onclick="reanalyseCurrent()">↻ Re-run analysis</button>
+      <!-- v3.9.2: names in a transcript are stamped at transcription time by word count -
+           whoever talks most becomes Speaker A. In any meeting where a third party talks
+           most, the wrong person is credited with every word, and the AI summary inherits
+           it. This lets you correct it after the fact. -->
+      <button class="btn btn-ghost" onclick="openRelabel()">🎤 Relabel speakers</button>
       <button class="btn btn-ghost" onclick="openReportCurrent()">📄 Executive Report</button>
       <button class="btn btn-ghost" onclick="exportCurrentTranscript()">⬇ Export Transcript</button>
       <button class="btn btn-ghost" onclick="exportCurrent()">⬇ Export JSON</button>
@@ -636,9 +644,9 @@ const STORE='tr2_meetings', SKEY='tr2_settings', KKEY='tr2_aai_key', PKEY='tr2_p
    version it is not. Before this, the header said v3.5 while APP_VERSION said 3.3 and the
    local build was 3.6 — there was no reliable way to answer "what is actually running?".
    WHEN YOU CHANGE THE CODE: bump APP_VERSION and set BUILD_DATE. Nothing else. */
-const APP_VERSION='3.9.1';
+const APP_VERSION='3.9.2';
 const BUILD_DATE='2026-08-12';
-const BUILD_NOTE='recovery fixes + update check: the app now tells you when this phone is running an older build than the one published. Recording behaviour UNCHANGED from v3.8.0.';
+const BUILD_NOTE='recovery + update check + speaker relabelling. Re-run analysis and re-process any meeting; correct who said what after the fact. Recording behaviour UNCHANGED from v3.8.0.';
 // ── PER-APP BRANDING — the ONLY place a company name is hardcoded ──
 const APP_BRAND='Thistle Rock';       // header + report footer
 const APP_COMPANY='Thistle Rock Properties Ltd.';   // report masthead fallback
@@ -1707,6 +1715,87 @@ async function reanalyseCurrent(){
   }
 }
 
+
+/* ══ v3.9.2: CORRECT WHO SAID WHAT ════════════════════════════════════════════
+   buildSpeakerMap below assigns names by WORD COUNT - the person who spoke most
+   becomes Speaker A and takes the first name in Settings. It is not identifying
+   anybody. In the 27 July MDC sessions that put a client's words under "GMac" and
+   the facilitator's under "Carlin", and the AI summary then attributed decisions
+   to the wrong people. Left uncorrected that error is permanent and invisible.
+
+   This shows each detected voice with how much they spoke and a sample of what
+   they said, lets you name them, then rewrites every utterance and rebuilds
+   rawTranscript. Re-run analysis afterwards to correct the summary too. */
+function speakerStats(m){
+  const out={};
+  (m.utterances||[]).forEach(function(u){
+    const k=u.speaker||'?';
+    if(!out[k]) out[k]={key:k, words:0, turns:0, name:u.speakerName||k, sample:''};
+    const w=(u.text||'').split(/\s+/).filter(Boolean).length;
+    out[k].words+=w; out[k].turns++;
+    if((u.text||'').length>out[k].sample.length) out[k].sample=u.text||'';
+  });
+  const list=Object.values(out).sort(function(a,b){ return b.words-a.words; });
+  const total=list.reduce(function(n,x){ return n+x.words; },0)||1;
+  list.forEach(function(x){ x.pct=Math.round(x.words*100/total); });
+  return list;
+}
+function openRelabel(){
+  const p=document.getElementById('relabelPanel'); if(!p) return;
+  if(!currentMeeting || !(currentMeeting.utterances||[]).length){
+    showStatus('Open a meeting with a speaker-labelled transcript first.','warn'); return;
+  }
+  const list=speakerStats(currentMeeting);
+  const opts=(currentMeeting.attendees||[]).slice();
+  let html='<div class="card-title">Who is who in this transcript</div>'
+    + '<div class="small" style="margin-bottom:14px;">Names were assigned automatically by who spoke most, '
+    + 'which is often wrong when someone outside the partnership is in the room. Correct them here, then '
+    + 're-run the analysis so the summary credits the right people.</div>';
+  list.forEach(function(sp,i){
+    const samp=ccEscHtml(sp.sample.slice(0,140))+(sp.sample.length>140?'…':'');
+    html+='<div style="border-top:1px solid var(--border);padding:12px 0;">'
+      + '<div class="small" style="margin-bottom:6px;"><b>Voice '+sp.key+'</b> — '+sp.pct+'% of the words, '
+      + sp.turns+' turn'+(sp.turns===1?'':'s')+', currently labelled <b>'+ccEscHtml(sp.name)+'</b></div>'
+      + '<div class="small" style="font-style:italic;margin-bottom:8px;color:var(--mid);">“'+samp+'”</div>'
+      + '<input type="text" id="relab_'+sp.key+'" value="'+ccEscHtml(sp.name)+'" placeholder="Who is this?" />'
+      + (opts.length?('<div class="small" style="margin-top:6px;">'+opts.map(function(a){
+           return '<button class="btn btn-ghost btn-xs" style="margin:2px 4px 0 0;" onclick="document.getElementById(\'relab_'
+             +sp.key+'\').value='+JSON.stringify(a).replace(/"/g,'&quot;')+'">'+ccEscHtml(a)+'</button>'; }).join('')+'</div>'):'')
+      + '</div>';
+  });
+  html+='<div class="flex gap-8 fw" style="margin-top:14px;">'
+     + '<button class="btn btn-gold btn-sm" onclick="applyRelabel()">Apply to transcript</button>'
+     + '<button class="btn btn-ghost btn-sm" onclick="document.getElementById(\'relabelPanel\').classList.add(\'hidden\')">Cancel</button>'
+     + '</div>';
+  p.innerHTML=html; p.classList.remove('hidden');
+  try{ p.scrollIntoView({behavior:'smooth',block:'center'}); }catch(e){}
+}
+async function applyRelabel(){
+  if(!currentMeeting) return;
+  const list=speakerStats(currentMeeting), map={};
+  let changed=0;
+  list.forEach(function(sp){
+    const el=document.getElementById('relab_'+sp.key);
+    const v=(el&&el.value||'').trim()||sp.name;
+    map[sp.key]=v;
+    if(v!==sp.name) changed++;
+  });
+  if(!changed){ document.getElementById('relabelPanel').classList.add('hidden'); showStatus('No names were changed.','info'); return; }
+  currentMeeting.utterances=(currentMeeting.utterances||[]).map(function(u){
+    return Object.assign({},u,{speakerName:map[u.speaker]||u.speakerName||u.speaker});
+  });
+  /* rebuild the flat transcript so exports, the report and any re-analysis all use
+     the corrected names - not just the on-screen labels */
+  currentMeeting.rawTranscript=currentMeeting.utterances.map(function(u){
+    return '['+(u.speakerName||u.speaker)+']: '+u.text;
+  }).join('\n');
+  currentMeeting.speakersRelabelledAt=new Date().toISOString();
+  document.getElementById('relabelPanel').classList.add('hidden');
+  renderResults(currentMeeting);
+  showStatus('✓ '+changed+' speaker'+(changed===1?'':'s')+' relabelled and the transcript rewritten. '
+    + 'The summary still reflects the old names — tap <b>↻ Re-run analysis</b> to correct it.','success');
+  await saveMeeting(true);
+}
 
 function buildSpeakerMap(utterances,s){
   const map={},counts={};
