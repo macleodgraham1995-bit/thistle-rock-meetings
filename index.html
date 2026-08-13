@@ -398,6 +398,19 @@ select option { background: var(--panel); }
       <div id="recBlockMsg" class="status-bar s-warn hidden" style="display:block;line-height:1.5;margin-top:10px;"></div>
       <!-- v3.8 (ported): tells you whether this handset let the app hold the screen awake -->
       <div id="recWakeNote" class="small hidden" style="margin-top:8px;text-align:center;"></div>
+      <!-- v3.9.3: live microphone level. The app could previously capture a perfect-looking
+           file containing nothing but silence - AirPods in a pocket, a paired car kit, a case
+           over the mic - and every guard passed because chunks were arriving and the duration
+           matched. This is the only thing that actually proves sound is reaching the app. -->
+      <div id="micWrap" class="hidden" style="width:100%;margin-top:10px;">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span class="small" style="white-space:nowrap;">Mic level</span>
+          <div style="flex:1;height:8px;background:var(--panel);border:1px solid var(--border);border-radius:4px;overflow:hidden;">
+            <div id="micBar" style="height:100%;width:0%;background:linear-gradient(90deg,var(--rock),var(--gold));transition:width .12s;"></div>
+          </div>
+        </div>
+        <div id="micNote" class="small" style="margin-top:5px;text-align:center;"></div>
+      </div>
     </div>
     <!-- Hidden input that triggers native audio capture -->
     <input type="file" id="nativeAudioInput" accept="audio/*" capture="microphone" onchange="onNativeAudio(event)" />
@@ -644,9 +657,9 @@ const STORE='tr2_meetings', SKEY='tr2_settings', KKEY='tr2_aai_key', PKEY='tr2_p
    version it is not. Before this, the header said v3.5 while APP_VERSION said 3.3 and the
    local build was 3.6 — there was no reliable way to answer "what is actually running?".
    WHEN YOU CHANGE THE CODE: bump APP_VERSION and set BUILD_DATE. Nothing else. */
-const APP_VERSION='3.9.2';
+const APP_VERSION='3.9.3';
 const BUILD_DATE='2026-08-12';
-const BUILD_NOTE='recovery + update check + speaker relabelling. Re-run analysis and re-process any meeting; correct who said what after the fact. Recording behaviour UNCHANGED from v3.8.0.';
+const BUILD_NOTE='recovery + update check + speaker relabelling + live microphone level with silent-capture detection. Recording path otherwise UNCHANGED from v3.8.0.';
 // ── PER-APP BRANDING — the ONLY place a company name is hardcoded ──
 const APP_BRAND='Thistle Rock';       // header + report footer
 const APP_COMPANY='Thistle Rock Properties Ltd.';   // report masthead fallback
@@ -962,6 +975,11 @@ function boot() {
   try{ if(location.search){ history.replaceState(null,'',location.pathname); } }catch(e){}
   checkForUpdate(false);
   setInterval(function(){ checkForUpdate(false); }, 30*60*1000);
+  /* v3.9.3: register the offline worker. Network-first, so it can never pin you to a
+     stale build - it only steps in when there is no connection at all. */
+  try{ if('serviceWorker' in navigator){ navigator.serviceWorker.register('sw.js')
+      .then(function(){ console.log('Offline support active.'); })
+      .catch(function(e){ console.warn('Offline support unavailable:',e); }); } }catch(e){}
   ensureStoragePersistence();   // v3.8 (ported, CR-310): ask iOS not to evict the recordings
   auditRecordingCount();        // v3.8 (ported, CR-310): and notice loudly if it already has
   checkRecovery();
@@ -1053,6 +1071,85 @@ function removeAttendee(i) { attendees.splice(i,1); renderChips(); if(editingSav
 // History: capture="microphone" on a file input opens the CAMERA on iOS (WebKit bug),
 // and without capture iOS shows a photo/file picker with no record option.
 // MediaRecorder via getUserMedia is the only reliable in-page mic recording on iPhone.
+
+/* ══ v3.9.3: IS ANY SOUND ACTUALLY REACHING THE APP? ═══════════════════════════
+   Every safeguard in this app checks that a recording EXISTS. None has ever checked
+   that it contains anything. A phone with AirPods left in a pocket, a Bluetooth car
+   kit still paired, or a case over the microphone produces a flawless-looking
+   capture: chunks arrive every second, the watchdog is satisfied, the file duration
+   matches the elapsed time exactly, and the transcript comes back empty. Every guard
+   passes. It is the same shape of failure as 12 August - one where all the
+   instrumentation reports success - and it was completely undefended.
+
+   Two parts:
+     * a live level meter, so you can SEE sound arriving before you rely on it
+     * a running check that raises the alarm if nothing above the noise floor is
+       heard for two minutes while recording
+
+   Honest limit: this uses an AnalyserNode, and iOS suspends Web Audio when the page
+   is backgrounded. So the running check only works while the app is in front. The
+   meter at the start of a meeting works always, and that is where the AirPods case
+   gets caught. ═══════════════════════════════════════════════════════════════ */
+let micCtx=null, micAnalyser=null, micRAF=null, micPeak=0, micLastSoundAt=0, micWarned=false;
+const MIC_FLOOR=0.02;              // below this is silence for our purposes
+const MIC_SILENCE_MS=120000;       // two minutes of nothing = say something
+
+function micStart(stream){
+  try{
+    const AC=window.AudioContext||window.webkitAudioContext; if(!AC) return;
+    micCtx=new AC();
+    const src=micCtx.createMediaStreamSource(stream);
+    micAnalyser=micCtx.createAnalyser();
+    micAnalyser.fftSize=512;
+    src.connect(micAnalyser);
+    const buf=new Uint8Array(micAnalyser.fftSize);
+    micPeak=0; micWarned=false; micLastSoundAt=Date.now();
+    const wrap=document.getElementById('micWrap'); if(wrap) wrap.classList.remove('hidden');
+    const tick=function(){
+      if(!micAnalyser) return;
+      micAnalyser.getByteTimeDomainData(buf);
+      let sum=0;
+      for(let i=0;i<buf.length;i++){ const v=(buf[i]-128)/128; sum+=v*v; }
+      const rms=Math.sqrt(sum/buf.length);
+      if(rms>micPeak) micPeak=rms;
+      const bar=document.getElementById('micBar');
+      if(bar) bar.style.width=Math.min(100,Math.round(rms*260))+'%';
+      if(rms>MIC_FLOOR) micLastSoundAt=Date.now();
+      const quietFor=Date.now()-micLastSoundAt;
+      const note=document.getElementById('micNote');
+      if(note){
+        if(quietFor>MIC_SILENCE_MS){
+          note.innerHTML='<b style="color:#d4827a;">No sound has reached the app for '
+            +Math.floor(quietFor/60000)+' minutes.</b> Check the microphone is not covered and that '
+            +'audio is not routed to headphones or a car kit.';
+        } else if(micPeak<=MIC_FLOOR){
+          note.innerHTML='<b style="color:#d4a06a;">No sound detected yet</b> — say something to check the mic is live.';
+        } else {
+          note.textContent='Sound is reaching the app.';
+        }
+      }
+      /* Only shout once, and only if we are genuinely recording. */
+      if(quietFor>MIC_SILENCE_MS && !micWarned && mediaRecorder && mediaRecorder.state==='recording'){
+        micWarned=true;
+        showStatus('⚠ <b>NOTHING IS BEING PICKED UP.</b> The recorder is running but no sound has reached '
+          +'the app for '+Math.floor(quietFor/60000)+' minutes. This usually means audio is going to '
+          +'headphones, AirPods or a car kit, or the microphone is covered. <b>The recording will be silent.</b>','error');
+        try{ recAlarmStart('Warning. No sound is reaching the Thistle Rock app. Check the microphone.'); }catch(e){}
+      }
+      micRAF=requestAnimationFrame(tick);
+    };
+    tick();
+  }catch(e){ console.warn('Mic meter unavailable:',e); }
+}
+function micStop(){
+  try{ if(micRAF) cancelAnimationFrame(micRAF); }catch(e){}
+  micRAF=null; micAnalyser=null;
+  try{ if(micCtx) micCtx.close(); }catch(e){}
+  micCtx=null;
+  const wrap=document.getElementById('micWrap'); if(wrap) wrap.classList.add('hidden');
+}
+/* Did this recording ever hear anything at all? Used at stop time. */
+function micHeardAnything(){ return micPeak>MIC_FLOOR; }
 let mediaRecorder=null, recChunks=[], recStream=null, recTimerInt=null, recStart=0;
 
 /* ══ v3.8 — PORTED FROM THE ONE EYE BUILD (CR-303), 2026-08-10 ═══════════════
@@ -1259,6 +1356,13 @@ async function auditCapture(f, elapsedMs){
   return out;
 }
 function captureWarning(a){
+  if(a && a.silent){
+    return '<b>\u26a0 THIS RECORDING APPEARS TO BE SILENT.</b><br>'
+      + 'The file was created and is the right length, but no sound above the noise floor ever reached '
+      + 'the app. That almost always means audio was routed to headphones, AirPods or a car kit, or the '
+      + 'microphone was covered.<br><b>Write the meeting up from memory now</b>, and check the mic level '
+      + 'meter before the next one.';
+  }
   if(!a || !a.truncated) return '';
   const got=a.durationMs?fmtTimer(a.durationMs):'less than expected';
   const ran=fmtTimer(a.elapsedMs);
@@ -1365,12 +1469,16 @@ async function toggleRecord() {
     /* v3.8 (ported, CR-303): decode the file and compare its real length against the
        time the button was held down, BEFORE it is filed or synced. */
     const audited = await auditCapture(f, elapsedMs);
+    /* v3.9.3: a file full of silence is not a successful recording. Say so BEFORE it
+       is filed, while the meeting is still fresh enough to write up from memory. */
+    if(audited && !micHeardAnything()){ audited.silent = true; }
     await handleRecordedFile(f, recActiveId, audited);
   };
   clearReprocessTarget();   // DUPLICATE FIX: a new recording is a NEW meeting
   mediaRecorder.start(1000); // collect data every second so a crash loses almost nothing
   recStart = Date.now();
   recTruncated = false;
+  micStart(recStream);                                            // v3.9.3: prove sound is arriving
   recStartKeepAlive();                                            // v3.8 (ported, CR-303)
   recStartWatchdog();                                             // v3.8 (ported, CR-303)
   recAcquireWakeLock().then(function(got){
@@ -1389,6 +1497,7 @@ async function toggleRecord() {
 }
 function stopRecording() {
   recStopping = true; recStopAt = Date.now();   // SAFEGUARD v4: arm the restart cooldown
+  const heard = micHeardAnything(); micStop();   // v3.9.3
   recStopWatchdog(); recStopKeepAlive(); recReleaseWakeLock();   // v3.8 (ported, CR-303)
   try{ const el=document.getElementById('recWakeNote'); if(el) el.classList.add('hidden'); }catch(e){}
   if (mediaRecorder && mediaRecorder.state==='recording') mediaRecorder.stop();
@@ -1970,6 +2079,7 @@ function stampBuildIdentity(){
         'Changes &nbsp;'+BUILD_NOTE+'<br>'+
         'Sync &nbsp;&nbsp;&nbsp;&nbsp;'+(proxy?'shared team log':'DEVICE ONLY — no Worker URL set')+'<br>'+
         'Queued &nbsp;&nbsp;'+pendingCount()+' waiting to upload<br>'+
+        'Offline &nbsp;'+(('serviceWorker' in navigator)?((navigator.serviceWorker.controller)?'ready - opens without a signal':'registering...'):'not supported')+'<br>'+
         'Published '+(liveVersionSeen
             ? (liveVersionSeen===APP_VERSION ? liveVersionSeen+' — you are up to date'
                                              : '<b style="color:#d4a06a;">'+liveVersionSeen+' — THIS PHONE IS BEHIND</b>')
