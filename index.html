@@ -663,7 +663,7 @@ const STORE='tr2_meetings', SKEY='tr2_settings', KKEY='tr2_aai_key', PKEY='tr2_p
    WHEN YOU CHANGE THE CODE: bump APP_VERSION and set BUILD_DATE. Nothing else. */
 const APP_VERSION='4.1.2';
 const BUILD_DATE='2026-08-17';
-const BUILD_NOTE='v4.1.2: Dismiss now stops the beep and the spoken warning too, not just the alarm tone. v4.1.1: false mic alarm on screen lock fixed; Dismiss now silences for good and pulses instead; guard no longer judges a backgrounded recorder. Plus: meeting session that outlives the recorder + dead-man switch; watchdog auto-resumes; alarm on an <audio> element so it can sound when backgrounded; real keep-alive buffer; mic level + silent-capture detection; offline; update check.';
+const BUILD_NOTE='v4.1.2: one off switch for the alarm - Dismiss, Stop and End Meeting all silence every source (tone, beep, speech, vibration). v4.1.1: false mic alarm on screen lock fixed; Dismiss now silences for good and pulses instead; guard no longer judges a backgrounded recorder. Plus: meeting session that outlives the recorder + dead-man switch; watchdog auto-resumes; alarm on an <audio> element so it can sound when backgrounded; real keep-alive buffer; mic level + silent-capture detection; offline; update check.';
 // ── PER-APP BRANDING — the ONLY place a company name is hardcoded ──
 const APP_BRAND='Thistle Rock';       // header + report footer
 const APP_COMPANY='Thistle Rock Properties Ltd.';   // report masthead fallback
@@ -1309,6 +1309,23 @@ function alarmAcknowledge(){
     }
   }catch(e){}
 }
+/* v4.1.2 — THE OFF SWITCH.
+   Graham, 17 Aug: "beeping the entire time when recording and even when stopped".
+   stopRecording() and endMeeting() never silenced the alarm - only sessClose() did -
+   so once it started, stopping the recording did nothing and the beep ran until the
+   app was force-quit. There is now one function that guarantees silence from every
+   source, and everything that ends a recording calls it. */
+function alarmHardStop(){
+  try{ recAlarmOn=false; clearInterval(recAlarmTimer); recAlarmTimer=null; }catch(e){}
+  try{ clearInterval(alarmAckVibe); alarmAckVibe=null; }catch(e){}
+  try{ clearInterval(recVibeTimer); recVibeTimer=null; }catch(e){}
+  try{ if(navigator.vibrate) navigator.vibrate(0); }catch(e){}
+  try{ if(window.speechSynthesis) window.speechSynthesis.cancel(); }catch(e){}
+  try{ if(recAlarmAudio){ recAlarmAudio.volume=0; recAlarmAudio.pause(); } }catch(e){}
+  try{ if(recAudioCtx && recAudioCtx.state==='running') recAudioCtx.suspend(); }catch(e){}
+  alarmAck=false;
+  try{ const b=document.getElementById('alarmBar'); if(b) b.classList.add('hidden'); }catch(e){}
+}
 function alarmClearAck(){
   if(!alarmAck) return;                                   // v4.1.2: no needless work
   alarmAck=false;
@@ -1439,6 +1456,7 @@ function renderSessionBar(){
   }catch(e){}
 }
 async function endMeeting(){
+  alarmHardStop();                     // v4.1.2: ending means the noise stops
   if(!(sess&&sess.open)) return;
   const n=sess.segments.length;
   if(mediaRecorder && mediaRecorder.state==='recording'){
@@ -1920,6 +1938,7 @@ async function toggleRecord() {
   recTimerInt = setInterval(()=>{ tEl.textContent = fmtTimer(Date.now()-recStart); }, 500);
 }
 function stopRecording() {
+  alarmHardStop();                     // v4.1.2: stopping means the noise stops
   recStopping = true; recStopAt = Date.now();   // SAFEGUARD v4: arm the restart cooldown
   const heard = micHeardAnything(); micStop();   // v3.9.3
   recStopWatchdog(); recStopKeepAlive(); recReleaseWakeLock();   // v3.8 (ported, CR-303)
