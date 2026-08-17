@@ -330,7 +330,7 @@ select option { background: var(--panel); }
      be scrolled past, and one tap wide enough to hit without looking. -->
 <div id="alarmBar" class="hidden" style="position:fixed;top:0;left:0;right:0;z-index:9999;background:#b42318;color:#fff;padding:14px 16px;display:flex;align-items:center;gap:14px;box-shadow:0 4px 18px rgba(0,0,0,.45);">
   <div style="flex:1;font-size:14px;line-height:1.45;"><b>⚠ RECORDING PROBLEM</b><br>Check the app now — the recording has stopped or is short.</div>
-  <button onclick="recAlarmStop()" style="background:#fff;color:#b42318;border:none;border-radius:8px;padding:11px 18px;font-size:14px;font-weight:600;cursor:pointer;">Dismiss</button>
+  <button onclick="alarmAcknowledge()" style="background:#fff;color:#b42318;border:none;border-radius:8px;padding:11px 18px;font-size:14px;font-weight:600;cursor:pointer;">Dismiss</button>
 </div>
 
 <!-- v3.9.1: shown when this device is running an older build than the one on the server.
@@ -661,9 +661,9 @@ const STORE='tr2_meetings', SKEY='tr2_settings', KKEY='tr2_aai_key', PKEY='tr2_p
    version it is not. Before this, the header said v3.5 while APP_VERSION said 3.3 and the
    local build was 3.6 — there was no reliable way to answer "what is actually running?".
    WHEN YOU CHANGE THE CODE: bump APP_VERSION and set BUILD_DATE. Nothing else. */
-const APP_VERSION='4.1.0';
-const BUILD_DATE='2026-08-12';
-const BUILD_NOTE='meeting session that outlives the recorder + dead-man switch; watchdog auto-resumes; alarm on an <audio> element so it can sound when backgrounded; real keep-alive buffer; mic level + silent-capture detection; offline; update check.';
+const APP_VERSION='4.1.1';
+const BUILD_DATE='2026-08-17';
+const BUILD_NOTE='v4.1.1: false mic alarm on screen lock fixed; Dismiss now silences for good and pulses instead; guard no longer judges a backgrounded recorder. Plus: meeting session that outlives the recorder + dead-man switch; watchdog auto-resumes; alarm on an <audio> element so it can sound when backgrounded; real keep-alive buffer; mic level + silent-capture detection; offline; update check.';
 // ── PER-APP BRANDING — the ONLY place a company name is hardcoded ──
 const APP_BRAND='Thistle Rock';       // header + report footer
 const APP_COMPANY='Thistle Rock Properties Ltd.';   // report masthead fallback
@@ -1106,6 +1106,34 @@ function removeAttendee(i) { attendees.splice(i,1); renderChips(); if(editingSav
    meter at the start of a meeting works always, and that is where the AirPods case
    gets caught. ═══════════════════════════════════════════════════════════════ */
 let micCtx=null, micAnalyser=null, micRAF=null, micPeak=0, micLastSoundAt=0, micWarned=false;
+
+/* ══ v4.1.1 — 17 August 2026 ═══════════════════════════════════════════════
+   THE ALARM CRIED WOLF FOR FIFTY MINUTES.
+
+   On 17 August a real meeting recorded correctly end to end — 49m39s captured
+   against 50m38s open, two segments, none failed — while the alarm sounded
+   continuously and could not be silenced. Three faults, one behind the other:
+
+   1. The mic meter runs on requestAnimationFrame, which iOS SUSPENDS the moment
+      the screen locks. micLastSoundAt froze at the lock, so on unlock the app
+      measured the whole locked period as silence. Any lock over two minutes
+      produced a guaranteed false "nothing is being picked up".
+
+   2. Dismiss worked for up to twenty seconds. The session guard's interval called
+      alarmSound(true) again on its next pass, because nothing recorded that the
+      user had already been told. The user could not win.
+
+   3. The guard judges health on audio chunks arriving — correct after 12 August —
+      but iOS pauses ondataavailable while backgrounded, which is the very state
+      the guard exists to police. A locked phone with a healthy recording is
+      indistinguishable from a dead recorder.
+
+   An alarm you cannot silence during a false positive is worse than no alarm: it
+   made Graham handle the phone mid-meeting, which is what caused the dropouts.
+   ══════════════════════════════════════════════════════════════════════════ */
+let pageHiddenSince=0, resumeGraceUntil=0;
+let alarmAck=false, alarmAckVibe=null;
+const RESUME_GRACE_MS=30000;   // after unlock, let audio prove itself before judging
 const MIC_FLOOR=0.02;              // below this is silence for our purposes
 const MIC_SILENCE_MS=120000;       // two minutes of nothing = say something
 
@@ -1130,6 +1158,9 @@ function micStart(stream){
       const bar=document.getElementById('micBar');
       if(bar) bar.style.width=Math.min(100,Math.round(rms*260))+'%';
       if(rms>MIC_FLOOR) micLastSoundAt=Date.now();
+      /* v4.1.1: rAF does not run while hidden, so never count a locked screen as
+         silence — that was the false alarm on 17 August. */
+      if(Date.now()<resumeGraceUntil) micLastSoundAt=Date.now();
       const quietFor=Date.now()-micLastSoundAt;
       const note=document.getElementById('micNote');
       if(note){
@@ -1250,9 +1281,41 @@ function alarmArm(){            // called from the record tap: unlock and hold i
     const p=recAlarmAudio.play(); if(p&&p.catch) p.catch(function(){});
   }catch(e){}
 }
+/* v4.1.1: Dismiss now means something. The noise stops for good on this fault;
+   a gentle pulse every 30s keeps a REAL failure from being forgotten, which is the
+   balance Graham asked for. The red bar stays up — we silence the siren, not the
+   warning. Acknowledgement clears itself once audio is flowing again, so the next
+   genuine fault gets the full alarm. */
+function alarmAcknowledge(){
+  alarmAck=true;
+  alarmSound(false);
+  clearInterval(alarmAckVibe);
+  alarmAckVibe=setInterval(function(){
+    try{ if(navigator.vibrate) navigator.vibrate(180); }catch(e){}
+  },30000);
+  try{
+    const b=document.getElementById('alarmBar');
+    if(b){ b.style.background='#7a4a12';
+      const t=b.querySelector('div');
+      if(t) t.innerHTML='<b>⚠ SILENCED — STILL NOT RECORDING</b><br>The sound is off. The phone will pulse every 30 seconds until audio is flowing again.';
+    }
+  }catch(e){}
+}
+function alarmClearAck(){
+  alarmAck=false;
+  clearInterval(alarmAckVibe); alarmAckVibe=null;
+  try{
+    const b=document.getElementById('alarmBar');
+    if(b){ b.style.background='#b42318';
+      const t=b.querySelector('div');
+      if(t) t.innerHTML='<b>⚠ RECORDING PROBLEM</b><br>Check the app now — the recording has stopped or is short.';
+    }
+  }catch(e){}
+}
 function alarmSound(on){
   try{
     if(!recAlarmAudio) return;
+    if(on && alarmAck) return;          // v4.1.1: the user has already been told
     if(on){
       recAlarmAudio.volume=1;
       const p=recAlarmAudio.play(); if(p&&p.catch) p.catch(function(){});
@@ -1314,7 +1377,12 @@ function sessStartGuard(){
        on AUDIO ARRIVING (recLastChunkAt), which is the only honest signal. */
     const stateOk = mediaRecorder && mediaRecorder.state==='recording';
     const flowing = stateOk && (Date.now()-recLastChunkAt) < 30000;
-    if(flowing){ sessNoteRecorderAlive(); alarmSound(false); renderSessionBar(); return; }
+    if(flowing){ sessNoteRecorderAlive(); alarmClearAck(); alarmSound(false); renderSessionBar(); return; }
+    /* v4.1.1: while the page is hidden iOS pauses ondataavailable, so "no chunks"
+       proves nothing. Hold judgement until the app is back in front and has had
+       RESUME_GRACE_MS to show audio again. A real stall is still caught — it is
+       caught the moment you look at the phone, which is when you can act on it. */
+    if(document.hidden || Date.now()<resumeGraceUntil){ renderSessionBar(); return; }
     const idle=Date.now()-(sess.lastRecorderAt||sess.startedAt);
     sess.gapMs=idle; sessSave();
     if(idle>60000){
@@ -1476,7 +1544,25 @@ function recReleaseWakeLock(){
 }
 /* iOS drops the wake lock when the page is hidden; take it again on return */
 document.addEventListener('visibilitychange', function(){
-  if(document.visibilityState==='visible' && mediaRecorder && mediaRecorder.state==='recording') recAcquireWakeLock();
+  if(document.hidden){ pageHiddenSince=Date.now(); return; }
+  /* v4.1.1: back in front. Clocks that could not tick while hidden must not be
+     read as evidence of failure. Give audio a grace window to prove itself. */
+  if(pageHiddenSince){
+    resumeGraceUntil=Date.now()+RESUME_GRACE_MS;
+    micLastSoundAt=Date.now(); micWarned=false;
+    recLastChunkAt=Date.now();        // v4.1.1: chunks could not arrive while hidden
+    if(sess&&sess.open){ sess.lastRecorderAt=Date.now(); sessSave(); }
+    pageHiddenSince=0;
+    /* If audio genuinely does not come back within the grace window, the watchdog
+       will now catch it honestly - awake, in front, and able to resume. */
+    setTimeout(function(){
+      if(document.hidden) return;
+      if(sess&&sess.open&&mediaRecorder&&mediaRecorder.state==='recording'&&(Date.now()-recLastChunkAt)>RESUME_GRACE_MS){
+        resumeRecorder('audio did not resume after the screen came back');
+      }
+    },RESUME_GRACE_MS+2000);
+  }
+  if(mediaRecorder && mediaRecorder.state==='recording') recAcquireWakeLock();
 });
 function recStartKeepAlive(){
   try{
@@ -1507,6 +1593,15 @@ function recStartWatchdog(){
   clearInterval(recWatchdog);
   recWatchdog=setInterval(function(){
     if(!(mediaRecorder && mediaRecorder.state==='recording')) return;
+    /* v4.1.1 — THE ACTUAL CAUSE OF THE 17 AUGUST SIREN.
+       resumeRecorder calls getUserMedia, and iOS REFUSES getUserMedia while the page
+       is backgrounded. So every screen lock ran this sequence: iOS throttles
+       ondataavailable -> gap exceeds 15s -> watchdog fires -> resume fails on a
+       permission iOS was never going to grant -> "could not restart" alarm -> retry
+       in 15s -> alarm again, forever. Dismiss could not win against a 15-second
+       retry loop. Do not attempt a resume we know cannot succeed; the recorder is
+       usually still alive and simply not delivering until the screen comes back. */
+    if(document.hidden || Date.now()<resumeGraceUntil) return;
     const gap=Date.now()-recLastChunkAt;
     if(gap>15000){                       // chunks arrive every second; 15s is dead
       recTruncated=true;
@@ -1585,7 +1680,12 @@ async function resumeRecorder(why){
       +' <button class="btn btn-gold btn-sm" onclick="toggleRecord()">Resume recording</button>','error');
     recAlarmStart('Warning. The recording stopped and could not restart. Check the Thistle Rock app now.');
     renderSessionBar();
-    if(recResumeTries<10) setTimeout(function(){ if(sess&&sess.open&&!(mediaRecorder&&mediaRecorder.state==='recording')) resumeRecorder('retrying'); },15000);
+    /* v4.1.1: the retry loop must not run while hidden either - that is what kept
+       re-raising the alarm after every Dismiss. It resumes when the app is back. */
+    if(recResumeTries<10) setTimeout(function(){
+      if(document.hidden) return;
+      if(sess&&sess.open&&!(mediaRecorder&&mediaRecorder.state==='recording')) resumeRecorder('retrying');
+    },15000);
   }
 }
 
