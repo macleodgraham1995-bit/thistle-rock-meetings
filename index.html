@@ -661,9 +661,9 @@ const STORE='tr2_meetings', SKEY='tr2_settings', KKEY='tr2_aai_key', PKEY='tr2_p
    version it is not. Before this, the header said v3.5 while APP_VERSION said 3.3 and the
    local build was 3.6 — there was no reliable way to answer "what is actually running?".
    WHEN YOU CHANGE THE CODE: bump APP_VERSION and set BUILD_DATE. Nothing else. */
-const APP_VERSION='4.1.1';
+const APP_VERSION='4.1.2';
 const BUILD_DATE='2026-08-17';
-const BUILD_NOTE='v4.1.1: false mic alarm on screen lock fixed; Dismiss now silences for good and pulses instead; guard no longer judges a backgrounded recorder. Plus: meeting session that outlives the recorder + dead-man switch; watchdog auto-resumes; alarm on an <audio> element so it can sound when backgrounded; real keep-alive buffer; mic level + silent-capture detection; offline; update check.';
+const BUILD_NOTE='v4.1.2: Dismiss now stops the beep and the spoken warning too, not just the alarm tone. v4.1.1: false mic alarm on screen lock fixed; Dismiss now silences for good and pulses instead; guard no longer judges a backgrounded recorder. Plus: meeting session that outlives the recorder + dead-man switch; watchdog auto-resumes; alarm on an <audio> element so it can sound when backgrounded; real keep-alive buffer; mic level + silent-capture detection; offline; update check.';
 // ── PER-APP BRANDING — the ONLY place a company name is hardcoded ──
 const APP_BRAND='Thistle Rock';       // header + report footer
 const APP_COMPANY='Thistle Rock Properties Ltd.';   // report masthead fallback
@@ -1287,7 +1287,15 @@ function alarmArm(){            // called from the record tap: unlock and hold i
    warning. Acknowledgement clears itself once audio is flowing again, so the next
    genuine fault gets the full alarm. */
 function alarmAcknowledge(){
+  /* v4.1.2 — 17 Aug, second pass. v4.1.1 silenced the <audio> element and left the
+     3-second timer running, so the AudioContext beep carried on every 3s and the
+     spoken warning every 9s. Dismiss killed one of THREE noise sources. There is no
+     partial silence: acknowledge tears all of it down. */
   alarmAck=true;
+  recAlarmOn=false;
+  clearInterval(recAlarmTimer); recAlarmTimer=null;      // stops the beep and the speech
+  try{ if(window.speechSynthesis) window.speechSynthesis.cancel(); }catch(e){}
+  try{ if(recAudioCtx && recAudioCtx.state==='running') recAudioCtx.suspend(); }catch(e){}
   alarmSound(false);
   clearInterval(alarmAckVibe);
   alarmAckVibe=setInterval(function(){
@@ -1302,7 +1310,9 @@ function alarmAcknowledge(){
   }catch(e){}
 }
 function alarmClearAck(){
+  if(!alarmAck) return;                                   // v4.1.2: no needless work
   alarmAck=false;
+  try{ if(recAudioCtx && recAudioCtx.state==='suspended') recAudioCtx.resume(); }catch(e){}
   clearInterval(alarmAckVibe); alarmAckVibe=null;
   try{
     const b=document.getElementById('alarmBar');
@@ -1488,6 +1498,7 @@ function recAlarmPattern(){
 }
 function recSpeak(msg){
   try{
+    if(alarmAck) return;        // v4.1.2
     if(!window.speechSynthesis) return;
     window.speechSynthesis.cancel();
     const u=new SpeechSynthesisUtterance(msg); u.rate=0.95; u.pitch=1; u.volume=1;
@@ -1502,6 +1513,7 @@ function recSpeak(msg){
    less true after a minute; it stops when the recorder is running again or the
    meeting is closed. */
 function recAlarmStart(spoken){
+  if(alarmAck) return;        // v4.1.2: acknowledged means acknowledged
   if(recAlarmOn) return;
   recAlarmOn=true; recAlarmTicks=0; recAlarmMsg=spoken||'Recording stopped. Check the Thistle Rock app.';
   alarmSound(true);                                    // survives backgrounding
