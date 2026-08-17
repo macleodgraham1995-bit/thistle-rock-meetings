@@ -342,6 +342,10 @@ select option { background: var(--panel); }
   <button class="btn btn-gold btn-sm" onclick="applyUpdate()">Update now</button>
 </div>
 
+<!-- v4.1: the meeting session. Visible while a meeting is open, whether or not
+     anything is recording - which is the entire point of it. -->
+<div id="sessionBar" class="status-bar hidden" style="align-items:center;gap:12px;margin:0 0 12px;"></div>
+
 <div id="recoveryBar"></div>
 
   <div class="key-bar" id="keyBar">
@@ -657,9 +661,9 @@ const STORE='tr2_meetings', SKEY='tr2_settings', KKEY='tr2_aai_key', PKEY='tr2_p
    version it is not. Before this, the header said v3.5 while APP_VERSION said 3.3 and the
    local build was 3.6 — there was no reliable way to answer "what is actually running?".
    WHEN YOU CHANGE THE CODE: bump APP_VERSION and set BUILD_DATE. Nothing else. */
-const APP_VERSION='3.9.3';
+const APP_VERSION='4.1.0';
 const BUILD_DATE='2026-08-12';
-const BUILD_NOTE='recovery + update check + speaker relabelling + live microphone level with silent-capture detection. Recording path otherwise UNCHANGED from v3.8.0.';
+const BUILD_NOTE='meeting session that outlives the recorder + dead-man switch; watchdog auto-resumes; alarm on an <audio> element so it can sound when backgrounded; real keep-alive buffer; mic level + silent-capture detection; offline; update check.';
 // ── PER-APP BRANDING — the ONLY place a company name is hardcoded ──
 const APP_BRAND='Thistle Rock';       // header + report footer
 const APP_COMPANY='Thistle Rock Properties Ltd.';   // report masthead fallback
@@ -982,6 +986,17 @@ function boot() {
       .catch(function(e){ console.warn('Offline support unavailable:',e); }); } }catch(e){}
   ensureStoragePersistence();   // v3.8 (ported, CR-310): ask iOS not to evict the recordings
   auditRecordingCount();        // v3.8 (ported, CR-310): and notice loudly if it already has
+  /* v4.0: a meeting outlives the page. If the app was closed, reloaded or discarded
+     with a session still open, pick it up rather than pretending it never happened. */
+  sess=sessLoad();
+  if(sess){
+    sessStartGuard(); renderSessionBar();
+    showStatus('⚠ <b>A meeting is still open</b> from '+new Date(sess.startedAt).toLocaleString()
+      +' with '+sess.segments.length+' segment(s) recorded. Nothing is recording now.'
+      +' <button class="btn btn-gold btn-sm" onclick="toggleRecord()">Resume recording</button>'
+      +' <button class="btn btn-ghost btn-sm" onclick="endMeeting()">End meeting</button>','error');
+  }
+  try{ if('Notification' in window && Notification.permission==='default') Notification.requestPermission(); }catch(e){}
   checkRecovery();
   pullMeetings();
   // FIX 2026-07-28: retry unsent meetings on a timer and on reconnect — not only when
@@ -1179,6 +1194,183 @@ let mediaRecorder=null, recChunks=[], recStream=null, recTimerInt=null, recStart
    Belt, braces and a smoke alarm. The first two prevent. The third guarantees that
    if it happens anyway, nobody finds out a week later. ══════════════════════════ */
 let recWakeLock=null, recKeepAudio=null, recWatchdog=null, recLastChunkAt=0, recTruncated=false;
+/* ══ v4.0 (2026-08-12): THE 87 MINUTES ═════════════════════════════════════════
+   On 12 August a three-and-a-half hour partner meeting produced 56 minutes of
+   record. The recorder was killed three times; the watchdog built on 10 August
+   detected all three and flagged them correctly. Then it cleared itself, called
+   stopRecording(), and painted "Start a new recording to carry on" onto a screen
+   lying face-down on the table. Nothing was watching for the next 87 minutes,
+   because to this app a meeting WAS a recording — end the recording and, as far
+   as the code was concerned, there was no longer a meeting to worry about.
+
+   Every safeguard built between 2 July and 10 August sits downstream of the
+   record button. Thirteen failure modes, all of them protecting audio that
+   already exists. Not one asks the only question that mattered that morning:
+   is a meeting happening right now, and is anything capturing it?
+
+   Three changes here, in the order they would have helped:
+
+   1. A SESSION that outlives the recorder. You open it when the meeting starts
+      and close it when the meeting ends. While it is open with nothing
+      recording, the app escalates every 60 seconds. This is the concept that
+      never existed.
+   2. AUTO-RESUME. The watchdog now restarts the recorder and re-arms itself
+      instead of surrendering. Three killed recorders should yield one meeting in
+      four segments, not four fragments and a hole.
+   3. AN ALARM THAT CAN BE HEARD. See the block below — the old one could not
+      sound in the exact condition it existed to announce.  ═══════════════════ */
+const SESSKEY='tr2_session';
+let sess=null;                  // the open meeting session, mirrored to localStorage
+let sessGuard=null;             // dead-man's switch interval
+let recResumeTries=0;           // consecutive failed restarts
+let resumingInPlace=false;      // true while a stall-restart is flushing a segment
+
+/* ══ WHY THE SIREN WAS SILENT ══════════════════════════════════════════════════
+   The 10 August alarm generates sound with the Web Audio API (AudioContext).
+   iOS SUSPENDS AudioContext the moment a page is backgrounded. The recorder dies
+   BECAUSE the page was backgrounded. So the alarm was mute in precisely the
+   condition it was built for — it could only ever be heard when it was not needed.
+
+   An HTMLAudioElement that is ALREADY PLAYING is not suspended; media playback
+   continues in the background. That is why the silent keep-alive works at all.
+   So the alarm is now an <audio> element started (silent) inside the record tap,
+   which unlocks it and keeps it live. Raising an already-playing element's volume
+   needs no user gesture and no new play() call. ═══════════════════════════════ */
+const ALARM_WAV='data:audio/wav;base64,UklGRgQvAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YeAuAACAgIKDgX15dnh/h46Oh3tvam98jZmajnpnXmR5kqSmlnpfUllzla6yn3xZRk1tlre/qn9UO0Fllr/MtYRQMDRblcbYwYtOJiZRkszlz5NNHBlGjc7r15pSHhdAhsnr26FYIRU7gMTq3qdeJBQ2eb/o4a1lKBQxcrnm5LRrLBQsa7Tk5rlyMRQoZa3h6L95NhQkXqfe6sSAOxUhWKHb68mGQBceUprX686NRhkbS5TT69OUSxsZRo3O69eaUh4XQIbJ69uhWCEVO4DE6t6nXiQUNnm/6OGtZSgUMXK55uS0aywULGu05Oa5cjEUKGWt4ei/eTYUJF6n3urEfzsVIVih2+vJhkAXHlKa1+vOjUYZG0uU0+vTlEsbGUaNzuvXmlIeF0CGyevboVghFTt/xOrep14kFDZ5v+jhrWUoFDFyuebktGssFCxrtOTmuXIxFChlreHov3k2FCRep97qxH87FSFYodvryYZAFx5Smtfrzo1GGRtLlNPr05RLGxlGjc7r15pSHhdAhsnr26FYIRU7gMTq3qdeJBQ2eb/o4a1lKBQxcrnm5LRrLBQsa7Tk5rlyMRQoZa3h6L95NhQkXqfe6sR/OxUhWKHb68mGQBceUprX686NRhkbS5TT69OUSxsZRo3O69eaUh4XQIbJ69uhWCEVO4DE6t6nXiQUNnm/6OGtZSgUMXK55uS0aywULGu05Oa5cjEUKGWt4ei/eTYUJF6n3urEfzsVIVih2+vJhkAXHlKa1+vOjUYZG0uU0+vTlEsbGUaNzuvXmlIeF0CGyevboVghFTt/xOrep14kFDZ5v+jhrWUoFDFyuebktGssFCxrtOTmuXIxFChlreHov3k2FCRep97qxIA7FSFYodvryYZAFx5Smtfrzo1GGRtLlNPr05RLGxlGjc7r15pSHhdAhsnr26FYIRU7gMTq3qdeJBQ2eb/o4a1lKBQxcrnm5LRrLBQsa7Tk5rlyMRQoZa3h6L95NhQkXqfe6sR/OxUhWKHb68mGQBceUprX686NRhkbS5TT69OUSxsZRo3O69eaUh4XQIbJ69uhWCEVO4DE6t6nXiQUNnm/6OGtZSgUMXK55uS0aywULGu05Oa5cjEUKGWt4ei/eTYUJF6n3urEfzsVIVih2+vJhkAXHlKa1+vOjUYZG0uU0+vTlEsbGUaNzuvXmlIeF0CGyevboVghFTuAxOrep14kFDZ5v+jhrWUoFDFyuebktGssFCxrtOTmuXIxFChlreHov3k2FCRep97qxH87FSFYodvryYZAFx5Smtfrzo1GGRtLlNPr05RLGxlGjc7r15pSHhdAhsnr26FYIRU7gMTq3qdeJBQ2eb/o4a1lKBQxcrnm5LRrLBQsa7Tk5rlyMRQoZa3h6L95NhQkXqfe6sR/OxUhWKHb68mGQBceUprX686NRhkbS5TT69OUSxsZRo3O69eaUh4XQIbJ69uhWCEVO4DE6t6nXiQUNnm/6OGtZSgUMXK55uS0aywULGu05Oa5cjEUKGWt4ei/eTYUJF6n3urEfzsVIVih2+vJhkAXHlKa1+vOjUYZG0uU0+vTlEsbGUaNzuvXmlIeF0CGyevboVghFTt/xOrep14kFDZ5v+jhrWUoFDFyuebktGssFCxrtOTmuXIxFChlreHov3k2FCRep97qxH87FSFYodvryYZAFx5Smtfrzo1GGRtLlNPr05RLGxlGjc7r15pSHhdAhsnr26FYIRU7f8Tq3qdeJBQ2eb/o4a1lKBQxcrnm5LRrLBQsa7Tk5rlyMRQoZa3h6L95NhQkXqfe6sSAOxUhWKHb68mGQBggU5nR48eMTCYpU5DE18KPVzMzVYm4y7ySYUA9WISsvrSSak1IXIChsquRcVlTYn2XpaKPd2RfaXyPmZeLe29rcXyHjYyGfnl3en6BgoGAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgYKAfHl8hYqHe3F0gpGRgW1oeZGcjXFfaoqinXxcWnqhrI9iTmWWtaVzSU+BtLqMUT1lpsepZDZIjMjFgzwvarrYqFIjRZ3dy3UmJXXQ5qE9FEqv6shlGiiE2+KSMRZYveu7VhYzk+PagicbZ8nqrUgUPqLo0XIfIXbT5587FEux68ZjGSqG3OGQMBdavuu5VBU0lePZgCYbacrqrEYUQKTo0HAeInjV5p06FE2z68RhGSuI3eCNLxdcwOu4UhU2l+TYfiUca8zpqkUUQqbpzm4dI3rW5Zs4FE+168NfGCyK39+LLRhewuu2UBU3muXXfCQdbc3pqEMURKjpzWwdJH3X5Zk3FVG268FdFy6M396JLBhgw+u0ThQ5nObWeiMeb8/ppkEURarqy2ocJn/Z5Jc1FVO4679bFy+O4N2HKhlixeuyTRQ6nubUdyIfcdDopD8UR6zqymgbJ4Ha45UzFVW6675ZFjGQ4dyFKRpkx+uwSxQ8oOfTdSEgc9Looj4USa7qyGYaKIPb4pIyFle867xXFjKS4tuDKBpmyOquSRQ+oujScyAhddPnoDwUS7Drx2QaKYXc4ZAxFlm+67pVFTOV49qBJxtoyuqsRxQ/pOjQcR8id9TmnjoUTbLrxWIZKofd4I4vF1u/67hTFTWX5Nl/Jhxqy+qqRRRBpunPbx4jetbmnDkUTrTrw2AYLIne34wuF13B67ZRFTeZ5dd9JB1szemoRBRDqOnNbR0kfNflmjcVULbrwl4YLYvf34osGF/D67VPFDib5dZ6Ix1uzummQhRFqunMaxwlftjklzYVUrjrwFwXL43g3YgrGWHE67NNFDqd5tV4Ih5w0OikQBRGrOrKaRsmgNnjlTQVVLnrvloXMJDh3IYqGWPG67FLFDuf59N2IR9y0eiiPhRIrerJZxsngtrjkzMWVrvrvVgWMZLi24QoGmXI6q9KFD2h59J0ICB00uegPRRKr+rHZRophNzikTEWWL3ru1YWM5Tj2oInG2fJ6q1IFD+j6NFyHyF31OeeOxRMsevGYxkqht3hjzAXWr/ruVQVNJbk2YAmG2nL6qtGFECl6M9wHiJ51eacORROs+vEYRgriN7gjS4XXMDrt1IVNpjk2H0lHGvM6alEFEKn6c5uHSN71uWaOBVQtevCXxgti9/fiy0YXsLrtVAVN5rl13skHW3O6adCFESp6cxsHCV92OSYNhVSt+vBXRcujeDeiSwYYMTrtE4UOZzm1XkjHm/P6KVBFEar6stqHCZ/2eSWNRVTueu/Wxcvj+HdhyoZYsXrskwUO57m1HciH3LQ6KM/FEet6sloGyeB2uOUMxZVuuu9WRYxkeLchSkaZMfrsEoUPKDn03UgIHTS56E9FEmv6shlGiiD2+KSMhZXvOu7VxYyk+LbgigaZsjqrkkUPqLo0XMgIXbT5588FEux68ZjGSmF3OGQMBZZvuu6VRU0lePZgCYbaMrqrEcUQKTo0HEfInjV5p06FE2y68VhGSuI3eCOLxdbwOu4UxU1l+TYfiUcaszqqkUUQabpzm8eI3rW5Zs4FE+068NfGCyK3t+MLRddweu2URU3meXXfCQdbc3pqEMUQ6jpzW0dJHzX5Zk3FVG268FdFy2M396KLBhfw+u0TxQ4m+XWeiMeb87ppkEURarqzGocJX7Y5Jc1FVO468BbFy+O4N2IKxlhxeuyTRQ6nebVeCIfcdDopEAUR6zqymgbJoDZ45U0FVW6675ZFjCQ4dyFKRljxuuxSxQ8n+fTdiEgc9Hooj4USa7qyGYaKILb4pMyFle767xXFjKS4tuDKBtmxeWsTR1EndrHdS8xd8LRmUwvWKLMsW07RoO6vYpQQmmiu59pSVmKr6mAWVV2namQa1pqi6CYe2VnfZSXhnJrd4iQiXx0d4CHhoB8fX+AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIKDgX15dnh/h46Oh3tvam98jZmajnpnXmR5kqSmlnpfUllzla6yn3xZRk1tlre/qn9UO0Fllr/MtYRQMDRblcbYwYtOJiZRkszlz5NNHBlGjc7r15pSHhdAhsnr26FYIRU7gMTq3qdeJBQ2eb/o4a1lKBQxcrnm5LRrLBQsa7Tk5rlyMRQoZa3h6L95NhQkXqfe6sSAOxUhWKHb68mGQBceUprX686NRhkbS5TT69OUSxsZRo3O69eaUh4XQIbJ69uhWCEVO4DE6t6nXiQUNnm/6OGtZSgUMXK55uS0aywULGu05Oa5cjEUKGWt4ei/eTYUJF6n3urEfzsVIVih2+vJhkAXHlKa1+vOjUYZG0uU0+vTlEsbGUaNzuvXmlIeF0CGyevboVghFTt/xOrep14kFDZ5v+jhrWUoFDFyuebktGssFCxrtOTmuXIxFChlreHov3k2FCRep97qxH87FSFYodvryYZAFx5Smtfrzo1GGRtLlNPr05RLGxlGjc7r15pSHhdAhsnr26FYIRU7gMTq3qdeJBQ2eb/o4a1lKBQxcrnm5LRrLBQsa7Tk5rlyMRQoZa3h6L95NhQkXqfe6sR/OxUhWKHb68mGQBceUprX686NRhkbS5TT69OUSxsZRo3O69eaUh4XQIbJ69uhWCEVO4DE6t6nXiQUNnm/6OGtZSgUMXK55uS0aywULGu05Oa5cjEUKGWt4ei/eTYUJF6n3urEfzsVIVih2+vJhkAXHlKa1+vOjUYZG0uU0+vTlEsbGUaNzuvXmlIeF0CGyevboVghFTt/xOrep14kFDZ5v+jhrWUoFDFyuebktGssFCxrtOTmuXIxFChlreHov3k2FCRep97qxIA7FSFYodvryYZAFx5Smtfrzo1GGRtLlNPr05RLGxlGjc7r15pSHhdAhsnr26FYIRU7gMTq3qdeJBQ2eb/o4a1lKBQxcrnm5LRrLBQsa7Tk5rlyMRQoZa3h6L95NhQkXqfe6sR/OxUhWKHb68mGQBceUprX686NRhkbS5TT69OUSxsZRo3O69eaUh4XQIbJ69uhWCEVO4DE6t6nXiQUNnm/6OGtZSgUMXK55uS0aywULGu05Oa5cjEUKGWt4ei/eTYUJF6n3urEfzsVIVih2+vJhkAXHlKa1+vOjUYZG0uU0+vTlEsbGUaNzuvXmlIeF0CGyevboVghFTuAxOrep14kFDZ5v+jhrWUoFDFyuebktGssFCxrtOTmuXIxFChlreHov3k2FCRep97qxH87FSFYodvryYZAFx5Smtfrzo1GGRtLlNPr05RLGxlGjc7r15pSHhdAhsnr26FYIRU7gMTq3qdeJBQ2eb/o4a1lKBQxcrnm5LRrLBQsa7Tk5rlyMRQoZa3h6L95NhQkXqfe6sR/OxUhWKHb68mGQBceUprX686NRhkbS5TT69OUSxsZRo3O69eaUh4XQIbJ69uhWCEVO4DE6t6nXiQUNnm/6OGtZSgUMXK55uS0aywULGu05Oa5cjEUKGWt4ei/eTYUJF6n3urEfzsVIVih2+vJhkAXHlKa1+vOjUYZG0uU0+vTlEsbGUaNzuvXmlIeF0CGyevboVghFTt/xOrep14kFDZ5v+jhrWUoFDFyuebktGssFCxrtOTmuXIxFChlreHov3k2FCRep97qxH87FSFYodvryYZAFx5Smtfrzo1GGRtLlNPr05RLGxlGjc7r15pSHhdAhsnr26FYIRU7f8Tq3qdeJBQ2eb/o4a1lKBQxcrnm5LRrLBQsa7Tk5rlyMRQoZa3h6L95NhQkXqfe6sSAOxUhWKHb68mGQBggU5nR48eMTCYpU5DE18KPVzMzVYm4y7ySYUA9WISsvrSSak1IXIChsquRcVlTYn2XpaKPd2RfaXyPmZeLe29rcXyHjYyGfnl3en6BgoGAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgYKAfHl8hYqHe3F0gpGRgW1oeZGcjXFfaoqinXxcWnqhrI9iTmWWtaVzSU+BtLqMUT1lpsepZDZIjMjFgzwvarrYqFIjRZ3dy3UmJXXQ5qE9FEqv6shlGiiE2+KSMRZYveu7VhYzk+PagicbZ8nqrUgUPqLo0XIfIXbT5587FEux68ZjGSqG3OGQMBdavuu5VBU0lePZgCYbacrqrEYUQKTo0HAeInjV5p06FE2z68RhGSuI3eCNLxdcwOu4UhU2l+TYfiUca8zpqkUUQqbpzm4dI3rW5Zs4FE+168NfGCyK39+LLRhewuu2UBU3muXXfCQdbc3pqEMURKjpzWwdJH3X5Zk3FVG268FdFy6M396JLBhgw+u0ThQ5nObWeiMeb8/ppkEURarqy2ocJn/Z5Jc1FVO4679bFy+O4N2HKhlixeuyTRQ6nubUdyIfcdDopD8UR6zqymgbJ4Ha45UzFVW6675ZFjGQ4dyFKRpkx+uwSxQ8oOfTdSEgc9Looj4USa7qyGYaKIPb4pIyFle867xXFjKS4tuDKBpmyOquSRQ+oujScyAhddPnoDwUS7Drx2QaKYXc4ZAxFlm+67pVFTOV49qBJxtoyuqsRxQ/pOjQcR8id9TmnjoUTbLrxWIZKofd4I4vF1u/67hTFTWX5Nl/Jhxqy+qqRRRBpunPbx4jetbmnDkUTrTrw2AYLIne34wuF13B67ZRFTeZ5dd9JB1szemoRBRDqOnNbR0kfNflmjcVULbrwl4YLYvf34osGF/D67VPFDib5dZ6Ix1uzummQhRFqunMaxwlftjklzYVUrjrwFwXL43g3YgrGWHE67NNFDqd5tV4Ih5w0OikQBRGrOrKaRsmgNnjlTQVVLnrvloXMJDh3IYqGWPG67FLFDuf59N2IR9y0eiiPhRIrerJZxsngtrjkzMWVrvrvVgWMZLi24QoGmXI6q9KFD2h59J0ICB00uegPRRKr+rHZRophNzikTEWWL3ru1YWM5Tj2oInG2fJ6q1IFD+j6NFyHyF31OeeOxRMsevGYxkqht3hjzAXWr/ruVQVNJbk2YAmG2nL6qtGFECl6M9wHiJ51eacORROs+vEYRgriN7gjS4XXMDrt1IVNpjk2H0lHGvM6alEFEKn6c5uHSN71uWaOBVQtevCXxgti9/fiy0YXsLrtVAVN5rl13skHW3O6adCFESp6cxsHCV92OSYNhVSt+vBXRcujeDeiSwYYMTrtE4UOZzm1XkjHm/P6KVBFEar6stqHCZ/2eSWNRVTueu/Wxcvj+HdhyoZYsXrskwUO57m1HciH3LQ6KM/FEet6sloGyeB2uOUMxZVuuu9WRYxkeLchSkaZMfrsEoUPKDn03UgIHTS56E9FEmv6shlGiiD2+KSMhZXvOu7VxYyk+LbgigaZsjqrkkUPqLo0XMgIXbT5588FEux68ZjGSmF3OGQMBZZvuu6VRU0lePZgCYbaMrqrEcUQKTo0HEfInjV5p06FE2y68VhGSuI3eCOLxdbwOu4UxU1l+TYfiUcaszqqkUUQabpzm8eI3rW5Zs4FE+068NfGCyK3t+MLRddweu2URU3meXXfCQdbc3pqEMUQ6jpzW0dJHzX5Zk3FVG268FdFy2M396KLBhfw+u0TxQ4m+XWeiMeb87ppkEURarqzGocJX7Y5Jc1FVO468BbFy+O4N2IKxlhxeuyTRQ6nebVeCIfcdDopEAUR6zqymgbJoDZ45U0FVW6675ZFjCQ4dyFKRljxuuxSxQ8n+fTdiEgc9Hooj4USa7qyGYaKILb4pMyFle767xXFjKS4tuDKBplyOqvSRQ9oefSdCAgddPnoDwUSrDrx2QaKYXc4pExFlm967pVFjOU49qBJxtoyeqtRxQ/o+jQch8id9TmnjsUTLLrxWIZKofd4Y8vF1u/67lTFTWW5Nl/Jhxqy+qrRhRBpejPbx4jedXmnDkUTrTrxGAYLIne4I0uF13B67dSFTaY5Nh9JRxszOmpRBRCp+nObR0ke9flmjcVULXrwl4YLYvf34stGF/C67VQFTia5dZ7Ix1uzumnQhREqenMaxwlfdjkmDYVUrfrwFwXLo3g3ogrGGHE67NOFDmc5tV5Ih5wz+ilQBRGq+rLaRsmf9nkljQVVLnrv1oXMI/h3YYqGWPG67FMFDue59R3IR9y0eijPxRIrerJZxsngtrjlDMWVrvrvVgWMZHi3IQpGmXH6q9KFD2g59J0ICB00uehPhdMreTCZyQyg8/Tjz8qYLDTrWExSI7FvoFFPnCtwZtfQluTuKp5T1F7pq6NY1Nrk6iZdl1kgZuchGtld46Wi3dtc4ONi4B3d36EhYF+foCAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIA=';
+let recAlarmAudio=null, recVibeTimer=null;
+
+function alarmArm(){            // called from the record tap: unlock and hold it live
+  try{
+    if(!recAlarmAudio){
+      recAlarmAudio=document.createElement('audio');
+      recAlarmAudio.loop=true; recAlarmAudio.setAttribute('playsinline','');
+      recAlarmAudio.src=ALARM_WAV;
+    }
+    recAlarmAudio.volume=0;                       // playing, inaudible, and unlocked
+    const p=recAlarmAudio.play(); if(p&&p.catch) p.catch(function(){});
+  }catch(e){}
+}
+function alarmSound(on){
+  try{
+    if(!recAlarmAudio) return;
+    if(on){
+      recAlarmAudio.volume=1;
+      const p=recAlarmAudio.play(); if(p&&p.catch) p.catch(function(){});
+      if(!recVibeTimer && navigator.vibrate){
+        recVibeTimer=setInterval(function(){ try{ navigator.vibrate([400,150,400,150,700]); }catch(e){} },2000);
+      }
+    }else{
+      recAlarmAudio.volume=0;
+      if(recVibeTimer){ clearInterval(recVibeTimer); recVibeTimer=null; }
+      try{ if(navigator.vibrate) navigator.vibrate(0); }catch(e){}
+    }
+  }catch(e){}
+}
+/* Best-effort only: a Notification needs permission AND the page to be running.
+   It is a bonus on top of the audio, never the thing we rely on. */
+function alarmNotify(msg){
+  try{
+    if(!('Notification' in window)) return;
+    if(Notification.permission==='granted'){ new Notification('Thistle Rock — recording problem',{body:msg,tag:'tr-rec',renotify:true}); }
+  }catch(e){}
+}
+
+/* ══════════ THE MEETING SESSION ══════════ */
+function sessSave(){ try{ if(sess) lssj(SESSKEY,sess); else localStorage.removeItem(SESSKEY); }catch(e){} }
+function sessLoad(){ try{ const s=lsj(SESSKEY); return (s&&s.open)?s:null; }catch(e){ return null; } }
+function sessOpen(){
+  if(sess&&sess.open) return sess;
+  sess={ id:'sess_'+Date.now(), open:true, startedAt:Date.now(), lastRecorderAt:Date.now(),
+         segments:[], resumes:0, gapMs:0,
+         date:document.getElementById('mDate').value,
+         type:document.getElementById('mType').value,
+         title:document.getElementById('mTitle').value||document.getElementById('mType').value };
+  recResumeTries=0;
+  sessSave(); sessStartGuard(); renderSessionBar();
+  return sess;
+}
+function sessClose(){
+  sessStopGuard(); alarmSound(false);
+  if(sess){ sess.open=false; sess.endedAt=Date.now(); }
+  sessSave(); renderSessionBar();
+}
+function sessNoteRecorderAlive(){ if(sess&&sess.open){ sess.lastRecorderAt=Date.now(); sessSave(); } }
+
+/* The dead-man's switch. This is the piece that did not exist on 12 August.
+   While a session is open and nothing is recording, it gets louder, and it does
+   not stop until the recorder is running again or the meeting is closed. */
+function sessStartGuard(){
+  alarmArm();   // FIX (review H1): the alarm was only ever armed by a record tap,
+                // so on the boot-recovery path - the exact case this guard exists for -
+                // alarmSound() returned immediately and nothing could be heard.
+  clearInterval(sessGuard);
+  sessGuard=setInterval(function(){
+    if(!(sess&&sess.open)) return;
+    /* FIX 2026-08-12 (independent review, C3): this used to test only
+       mediaRecorder.state==='recording' and then stamp the clock as alive. But the
+       12 August fault was a recorder that stayed in state 'recording' while
+       delivering no audio at all - so the guard would have sat there resetting its
+       own clock and painting "recording" in green through the entire gap. Judge it
+       on AUDIO ARRIVING (recLastChunkAt), which is the only honest signal. */
+    const stateOk = mediaRecorder && mediaRecorder.state==='recording';
+    const flowing = stateOk && (Date.now()-recLastChunkAt) < 30000;
+    if(flowing){ sessNoteRecorderAlive(); alarmSound(false); renderSessionBar(); return; }
+    const idle=Date.now()-(sess.lastRecorderAt||sess.startedAt);
+    sess.gapMs=idle; sessSave();
+    if(idle>60000){
+      const mins=Math.floor(idle/60000);
+      /* The audible alarm stays ON continuously - that is the point of it. But a
+         system notification every 20 seconds would be 258 of them across an 87
+         minute gap, which trains you to swipe them away. Escalate on a ladder
+         instead: 1, 2, 5, 10, 20, 40, 60 minutes and hourly after that. */
+      alarmSound(true);
+      const LADDER=[1,2,5,10,20,40,60];
+      const due = LADDER.indexOf(mins)>=0 || (mins>60 && mins%60===0);
+      if(due && sess.lastNotifiedMin!==mins){
+        sess.lastNotifiedMin=mins; sessSave();
+        alarmNotify('The meeting is still open but nothing has been recording for '+mins+' minute'+(mins===1?'':'s')+'.');
+      }
+      showStatus('⚠ <b>NOTHING IS RECORDING.</b> This meeting has been open for '+fmtTimer(Date.now()-sess.startedAt)
+        +' and nothing has been captured for '+mins+' minute'+(mins===1?'':'s')+'.'
+        +' <button class="btn btn-gold btn-sm" onclick="toggleRecord()">Resume recording</button>'
+        +' <button class="btn btn-ghost btn-sm" onclick="endMeeting()">End meeting</button>','error');
+    }
+    renderSessionBar();
+  },20000);
+}
+function sessStopGuard(){ clearInterval(sessGuard); sessGuard=null; }
+
+function renderSessionBar(){
+  try{
+    const bar=document.getElementById('sessionBar'); if(!bar) return;
+    if(!(sess&&sess.open)){ bar.classList.add('hidden'); return; }
+    const recording = mediaRecorder && mediaRecorder.state==='recording';
+    const idle=Date.now()-(sess.lastRecorderAt||sess.startedAt);
+    const bad = !recording && idle>60000;
+    bar.className='status-bar '+(recording?'s-success':(bad?'s-error':'s-warn'));
+    bar.style.display='flex';
+    bar.innerHTML='<div style="flex:1;line-height:1.45;">'
+      + '<b>'+(recording?'MEETING IN PROGRESS — recording':(bad?'MEETING OPEN — NOTHING RECORDING':'Meeting open — paused'))+'</b><br>'
+      + 'Open '+fmtTimer(Date.now()-sess.startedAt)
+      + (sess.segments.length?(' · '+sess.segments.length+' segment'+(sess.segments.length===1?'':'s')):'')
+      + (sess.resumes?(' · '+sess.resumes+' auto-resume'+(sess.resumes===1?'':'s')):'')
+      + (!recording?(' · nothing captured for '+fmtTimer(idle)):'')
+      + '</div>'
+      + '<button class="btn btn-ghost btn-sm" onclick="endMeeting()">End meeting</button>';
+    bar.classList.remove('hidden');
+  }catch(e){}
+}
+async function endMeeting(){
+  if(!(sess&&sess.open)) return;
+  const n=sess.segments.length;
+  if(mediaRecorder && mediaRecorder.state==='recording'){
+    if(!confirm('Stop recording and end this meeting?')) return;
+    resumingInPlace=false; stopRecording(); return;      // onstop finishes and calls endMeeting again
+  }
+  if(!confirm('End this meeting?'+(n?('\n\n'+n+' recorded segment'+(n===1?'':'s')+' will be transcribed and joined into one meeting record.'):'\n\nNothing was recorded.'))) return;
+  sessClose();
+  if(n) processSession();
+}
 
 /* ══ v3.8 — PORTED FROM ONE EYE (CR-322): AN ALARM YOU CAN ACTUALLY HEAR ══════
    The missing half of the above. The watchdog detects a stalled capture within
@@ -1234,24 +1426,31 @@ function recSpeak(msg){
     window.speechSynthesis.speak(u);
   }catch(e){}
 }
+/* v4.0: the <audio> element is now the PRIMARY alarm, because it is the only one
+   that can sound when the page is backgrounded. The AudioContext beep and the
+   spoken line are kept as extras for when the app IS in front — they cost nothing
+   and they are clearer, but nothing depends on them any more.
+   v4.0 also removes the 20-tick auto-stop. A recording problem does not become
+   less true after a minute; it stops when the recorder is running again or the
+   meeting is closed. */
 function recAlarmStart(spoken){
   if(recAlarmOn) return;
   recAlarmOn=true; recAlarmTicks=0; recAlarmMsg=spoken||'Recording stopped. Check the Thistle Rock app.';
-  recAlarmInit();
-  recAlarmPattern(); recSpeak(recAlarmMsg);
+  alarmSound(true);                                    // survives backgrounding
+  alarmNotify(recAlarmMsg);
+  recAlarmInit(); recAlarmPattern(); recSpeak(recAlarmMsg);   // extras, foreground only
   try{ const b=document.getElementById('alarmBar'); if(b) b.classList.remove('hidden'); }catch(e){}
   recAlarmTimer=setInterval(function(){
     recAlarmTicks++;
     recAlarmPattern();
     if(recAlarmTicks%3===0) recSpeak(recAlarmMsg);
-    if(recAlarmTicks>=20) recAlarmStop();          // about a minute, then stop nagging
   },3000);
 }
 function recAlarmStop(){
   recAlarmOn=false;
   clearInterval(recAlarmTimer); recAlarmTimer=null;
+  alarmSound(false);
   try{ if(window.speechSynthesis) window.speechSynthesis.cancel(); }catch(e){}
-  try{ if(navigator.vibrate) navigator.vibrate(0); }catch(e){}
   try{ const b=document.getElementById('alarmBar'); if(b) b.classList.add('hidden'); }catch(e){}
 }
 /* Settings has a Test button. An alarm nobody has heard is an alarm nobody trusts,
@@ -1284,8 +1483,11 @@ function recStartKeepAlive(){
     if(!recKeepAudio){
       recKeepAudio=document.createElement('audio');
       recKeepAudio.loop=true; recKeepAudio.setAttribute('playsinline','');
-      // 1s of silence, WAV. Inline so the app needs no network to stay awake.
-      recKeepAudio.src='data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAgD4AAAB9AAACABAAZGF0YQAAAAA=';
+      /* FIX (review C2): the previous data URI was a 44-byte WAV header with a data
+         chunk length of ZERO - it contained no audio at all and could not hold an
+         audio session open. Every background-survival claim since 10 August rested
+         on it. This is a real 1-second buffer at 8 kHz. */
+      recKeepAudio.src='data:audio/wav;base64,UklGRmQfAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YUAfAACBgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgYCAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIGAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICBgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgYCAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIGAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICBgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgYCAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIGAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICBgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgYCAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIGAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICBgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgYCAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIGAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICBgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgYCAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIGAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICBgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgYCAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgA==';
       recKeepAudio.volume=0.001;
     }
     const pr=recKeepAudio.play(); if(pr&&pr.catch) pr.catch(function(){});
@@ -1293,6 +1495,13 @@ function recStartKeepAlive(){
 }
 function recStopKeepAlive(){ try{ if(recKeepAudio) recKeepAudio.pause(); }catch(e){} }
 
+/* v4.0: THE WATCHDOG NOW RESUMES.
+   The 10 August version detected a stall, cleared itself, called stopRecording()
+   and told the user to start a new recording by hand. On 12 August that happened
+   three times and nobody saw any of it. Detection without recovery is just a
+   tidier way to lose the meeting.
+   It now restarts the recorder in place and keeps watching. The alarm sounds only
+   if a restart actually FAILS - which is the case a human genuinely must handle. */
 function recStartWatchdog(){
   recLastChunkAt=Date.now();
   clearInterval(recWatchdog);
@@ -1301,17 +1510,84 @@ function recStartWatchdog(){
     const gap=Date.now()-recLastChunkAt;
     if(gap>15000){                       // chunks arrive every second; 15s is dead
       recTruncated=true;
-      clearInterval(recWatchdog); recWatchdog=null;
-      showStatus('⚠ THE RECORDING STOPPED ON ITS OWN after '+fmtTimer(recLastChunkAt-recStart)
-        +' — the phone most likely locked or the app was put in the background. '
-        +'Everything captured up to that point has been kept. Start a new recording to carry on, '
-        +'and keep the screen on this time.','error');
-      recAlarmStart('Warning. The recording has stopped. Check the Thistle Rock app now.');
-      try{ stopRecording(); }catch(e){}
+      clearInterval(recWatchdog); recWatchdog=null;   // re-armed by resumeRecorder on success
+      resumeRecorder('the recorder stopped delivering audio');
     }
   },10000);
 }
 function recStopWatchdog(){ clearInterval(recWatchdog); recWatchdog=null; }
+
+/* Flush whatever the dead recorder captured into its own segment, then start a
+   fresh recorder against a fresh microphone stream and carry on. Segments are
+   joined back into one meeting when the session ends. */
+let resumeInFlight=false;
+async function resumeRecorder(why){
+  if(!(sess&&sess.open)){ try{ stopRecording(); }catch(e){} return; }   // no session: old behaviour
+  /* FIX (review C7): re-entrancy guard. resumeRecorder is reachable from the
+     watchdog, the mic-track onended handler and the retry timer, and none of them
+     checked whether a resume was already running. */
+  if(resumeInFlight) return;
+  resumeInFlight=true;
+  try{
+    resumingInPlace=true;
+    /* FIX (review C7): the old code slept a fixed 400 ms and hoped onstop had run.
+       If the stop event was late - which is likeliest under exactly the background
+       throttling that triggers a resume - resumingInPlace was already false again,
+       so onstop tore down the NEW recorder and threw away the old recorder's audio.
+       Wait for the actual event instead, with a ceiling. */
+    await new Promise(function(resolve){
+      let done=false;
+      const finish=function(){ if(!done){ done=true; resolve(); } };
+      try{
+        if(mediaRecorder && mediaRecorder.state==='recording'){
+          const prev=mediaRecorder.onstop;
+          mediaRecorder.onstop=async function(ev){ try{ if(prev) await prev.call(this,ev); }finally{ finish(); } };
+          mediaRecorder.stop();
+          setTimeout(finish, 6000);        // ceiling, so a lost event cannot hang the meeting
+        } else finish();
+      }catch(e){ finish(); }
+    });
+    try{ if(recStream){ recStream.getTracks().forEach(function(t){ t.stop(); }); recStream=null; } }catch(e){}
+
+    recStream = await navigator.mediaDevices.getUserMedia({ audio:true });
+    recChunks=[]; recActiveId=Date.now(); liveLastSave=0;
+    try{ mediaRecorder = new MediaRecorder(recStream,{audioBitsPerSecond:32000}); }
+    catch(e){ mediaRecorder = new MediaRecorder(recStream); }
+    wireRecorder();
+    mediaRecorder.start(1000);
+    recStart=Date.now(); recTruncated=false; resumingInPlace=false; recResumeTries=0;
+    sess.resumes=(sess.resumes||0)+1; sessNoteRecorderAlive(); sessSave();
+    /* FIX (review H5): a restart that SUCCEEDS but still captures nothing was
+       uncapped - recResumeTries reset on success, so the ceiling never applied and
+       a persistent fault could loop ~240 times an hour, each one a tiny segment.
+       Count resumes within the session and stop trying after 12. */
+    if((sess.resumes||0)>12){
+      showStatus('\u26a0 <b>The recorder has restarted '+sess.resumes+' times.</b> Something is repeatedly '
+        +'killing it. The meeting is still open and everything captured is safe, but automatic restarts '
+        +'have stopped. Use a second device for the rest of this meeting.','error');
+      recAlarmStart('Warning. The recording keeps failing. Use another device.');
+      resumeInFlight=false; return;
+    }
+    recStartKeepAlive(); recStartWatchdog(); recAcquireWakeLock();
+    recAlarmStop();
+    resumeInFlight=false;
+    showStatus('↻ The recording stopped on its own ('+why+') and was <b>restarted automatically</b>. '
+      +'This is segment '+(sess.segments.length+1)+'. Everything captured so far is kept and will be joined '
+      +'into one meeting when you end it.','warn');
+    renderSessionBar();
+  }catch(e){
+    resumingInPlace=false; resumeInFlight=false; recResumeTries++;
+    /* A restart failure is the case a person must actually deal with - the mic is
+       held by a phone call, or permission was withdrawn. THIS is when we shout. */
+    showStatus('⚠ <b>RECORDING STOPPED AND COULD NOT BE RESTARTED.</b> '+(e&&e.message?e.message:'')
+      +'<br>The meeting is still open and everything captured so far is safe. '
+      +'If you are on a call, the microphone is in use - tap Resume when it ends.'
+      +' <button class="btn btn-gold btn-sm" onclick="toggleRecord()">Resume recording</button>','error');
+    recAlarmStart('Warning. The recording stopped and could not restart. Check the Thistle Rock app now.');
+    renderSessionBar();
+    if(recResumeTries<10) setTimeout(function(){ if(sess&&sess.open&&!(mediaRecorder&&mediaRecorder.state==='recording')) resumeRecorder('retrying'); },15000);
+  }
+}
 
 /* ══ v3.8 — PORTED FROM ONE EYE (CR-303): MEASURE WHAT IS ACTUALLY IN THE FILE ══
    The zero-byte trap only catches a capture that produced nothing at all. What
@@ -1397,6 +1673,85 @@ function recBlock(html, focusEl){
 }
 function recBlockClear(){ try{ const b=document.getElementById('recBlockMsg'); if(b) b.classList.add('hidden'); }catch(e){} }
 
+/* v4.0: one place that wires a recorder, used by both the first start and every
+   auto-resume. Previously this lived inline in toggleRecord(), so a resumed
+   recorder would have had no crash-mirror, no heartbeat and no stop handling. */
+function wireRecorder(){
+  try{
+    recStream.getTracks().forEach(function(t){
+      t.onended=function(){
+        if(!(mediaRecorder && mediaRecorder.state==='recording')) return;
+        recTruncated=true;
+        /* v4.0: a dead mic track is usually an incoming call seizing the microphone.
+           Try to take it back rather than ending the meeting. */
+        resumeRecorder('the microphone was taken by another app or a call');
+      };
+    });
+  }catch(e){}
+  mediaRecorder.ondataavailable = function(e){
+    if (e.data && e.data.size>0){ recChunks.push(e.data); recLastChunkAt=Date.now(); sessNoteRecorderAlive(); }
+    if (recChunks.length && Date.now()-liveLastSave > 5000) {            // SAFEGUARD v4: live crash-mirror
+      liveLastSave = Date.now();
+      try { persistLive(recActiveId, new Blob(recChunks, {type:(recChunks[0]&&recChunks[0].type)||'audio/mp4'})); } catch(_){}
+    }
+  };
+  mediaRecorder.onstop = async function(){
+    const wasResume = resumingInPlace;
+    recStopping = false;
+    if(!wasResume){ recStopWatchdog(); recStopKeepAlive(); recReleaseWakeLock(); }
+    const elapsedMs = Date.now() - recStart;
+    if (recStream && !wasResume) { try{ recStream.getTracks().forEach(t=>t.stop()); }catch(e){} recStream=null; }
+    const type = (recChunks[0] && recChunks[0].type) || 'audio/mp4';
+    const blob = new Blob(recChunks, { type });
+    if (!recChunks.length || !blob.size) {
+      // SAFEGUARD v4: ZERO-BYTE TRAP. Never save an empty file, never overwrite a real one.
+      if(!wasResume){
+        showStatus('✗ RECORDING FAILED — no audio was captured (0 bytes). Nothing was saved and nothing was overwritten. Please record again.','error');
+        recAlarmStart('Recording failed. No audio was captured. Please record again.');
+      }
+      return;
+    }
+    const ext = type.includes('mp4') ? 'm4a' : (type.includes('ogg') ? 'ogg' : 'webm');
+    const f = new File([blob], 'meeting-recording-'+today()+'-'+recActiveId+'.'+ext, { type });
+
+    /* v4.0: inside an open session every stop produces a SEGMENT. The pipeline runs
+       once, at End Meeting, over all segments joined in order - so three killed
+       recorders make one meeting in four parts rather than four loose fragments. */
+    if(sess && sess.open){
+      /* FIX (review C5): the finished file is written BEFORE the crash mirror is
+         dropped. The old order deleted the mirror first, then spent up to 8 seconds
+         in auditCapture, leaving the audio existing only as a Blob in page memory -
+         on a device that has been discarding this page all week. */
+      const r=await persistAudio(f, recActiveId);
+      if(r&&r.ok){
+        await dropLive(recActiveId);        // safe now: the superseding file is on disk
+        const audited = await auditCapture(f, elapsedMs);
+    if(audited && !micHeardAnything()){ audited.silent = true; }   // v3.9.3
+        sess.segments.push({key:r.key, at:Date.now(), ms:elapsedMs, truncated:!!(audited&&audited.truncated)});
+        sessSave(); renderSessionBar();
+      } else {
+        /* FIX (review C4): there was no else. A failed write dropped the segment
+           silently, and the user was then told "Nothing was recorded in that
+           meeting." Never lose audio quietly - offer to save it out instead. */
+        window.__rescueFile=f;
+        showStatus('⚠ <b>COULD NOT SAVE THAT SEGMENT TO THIS DEVICE</b> — storage may be full. '
+          +'The audio is still in memory RIGHT NOW but will be lost if you close the app. '
+          +'<button class="btn btn-gold btn-sm" onclick="shareBlobFile(window.__rescueFile)">💾 Save it to Files now</button>','error');
+        recAlarmStart('Warning. A recording could not be saved to this device. Save it to Files now.');
+        if(wasResume) return;
+      }
+      if(wasResume) return;                 // a resume just banks the segment and carries on
+      sessClose();                          // user pressed stop: close the meeting and process
+      processSession();
+      return;
+    }
+    await dropLive(recActiveId);
+    const audited = await auditCapture(f, elapsedMs);
+    if(audited && !micHeardAnything()){ audited.silent = true; }   // v3.9.3
+    await handleRecordedFile(f, recActiveId, audited);   // no session: unchanged behaviour
+  };
+}
+
 async function toggleRecord() {
   if (mediaRecorder && mediaRecorder.state === 'recording') { stopRecording(); return; }
   /* v3.8 (ported, CR-314): do not let a second recording start while the first is
@@ -1409,9 +1764,10 @@ async function toggleRecord() {
   /* v3.8 (ported, CR-322): this tap is our user gesture. Prepare the alarm audio
      now — created any later, iOS refuses to let it make a sound. */
   recAlarmInit();
+  alarmArm();      // v4.1: unlock the <audio> alarm on this gesture
   // SAFEGUARD v4: guard against an accidental tap right after stopping — the stray
   // restart that silently overwrote a real recording. Require a deliberate confirm.
-  if (recStopping || (Date.now()-recStopAt) < 4000) {
+  if (!(sess&&sess.open) && (recStopping || (Date.now()-recStopAt) < 4000)) {
     if(!confirm('Start a NEW recording? Your previous recording is already saved — this begins a separate, new one.')) return;
   }
   if (!navigator.mediaDevices || !window.MediaRecorder) {
@@ -1428,56 +1784,12 @@ async function toggleRecord() {
   try { mediaRecorder = new MediaRecorder(recStream, { audioBitsPerSecond: 32000 }); }
   catch(e) { mediaRecorder = new MediaRecorder(recStream); }
   recActiveId = Date.now(); liveLastSave = 0;
-  /* v3.8 (ported): if the microphone is seized or the track dies, we hear about it
-     immediately rather than at the end. */
-  try{
-    recStream.getTracks().forEach(function(t){
-      t.onended=function(){
-        if(!(mediaRecorder && mediaRecorder.state==='recording')) return;
-        recTruncated=true;
-        showStatus('⚠ THE MICROPHONE STOPPED after '+fmtTimer(Date.now()-recStart)
-          +'. Everything captured up to that point has been kept.','error');
-        recAlarmStart('Warning. The microphone has stopped. Check the Thistle Rock app now.');
-        try{ stopRecording(); }catch(e){}
-      };
-    });
-  }catch(e){}
-  mediaRecorder.ondataavailable = e => {
-    if (e.data && e.data.size>0){ recChunks.push(e.data); recLastChunkAt=Date.now(); }   // v3.8: watchdog heartbeat
-    if (recChunks.length && Date.now()-liveLastSave > 5000) {            // SAFEGUARD v4: live crash-mirror
-      liveLastSave = Date.now();
-      try { persistLive(recActiveId, new Blob(recChunks, {type:(recChunks[0]&&recChunks[0].type)||'audio/mp4'})); } catch(_){}
-    }
-  };
-  mediaRecorder.onstop = async () => {
-    recStopping = false;
-    recStopWatchdog(); recStopKeepAlive(); recReleaseWakeLock();   // v3.8: idempotent — also covers a watchdog-initiated stop
-    const elapsedMs = Date.now() - recStart;
-    if (recStream) { recStream.getTracks().forEach(t=>t.stop()); recStream=null; }
-    const type = (recChunks[0] && recChunks[0].type) || 'audio/mp4';
-    const blob = new Blob(recChunks, { type });
-    // SAFEGUARD v4: ZERO-BYTE TRAP — if nothing was captured, refuse it loudly and
-    // do NOT touch any existing recording. An empty file is never saved.
-    if (!recChunks.length || !blob.size) {
-      showStatus('✗ RECORDING FAILED — no audio was captured (0 bytes). Nothing was saved and nothing was overwritten. Please record again.','error');
-      recAlarmStart('Recording failed. No audio was captured. Please record again.');
-      return;
-    }
-    const ext = type.includes('mp4') ? 'm4a' : (type.includes('ogg') ? 'ogg' : 'webm');
-    const f = new File([blob], 'meeting-recording-'+today()+'-'+recActiveId+'.'+ext, { type });
-    await dropLive(recActiveId);
-    /* v3.8 (ported, CR-303): decode the file and compare its real length against the
-       time the button was held down, BEFORE it is filed or synced. */
-    const audited = await auditCapture(f, elapsedMs);
-    /* v3.9.3: a file full of silence is not a successful recording. Say so BEFORE it
-       is filed, while the meeting is still fresh enough to write up from memory. */
-    if(audited && !micHeardAnything()){ audited.silent = true; }
-    await handleRecordedFile(f, recActiveId, audited);
-  };
+  wireRecorder();
   clearReprocessTarget();   // DUPLICATE FIX: a new recording is a NEW meeting
   mediaRecorder.start(1000); // collect data every second so a crash loses almost nothing
   recStart = Date.now();
   recTruncated = false;
+  sessOpen(); sessNoteRecorderAlive(); recAlarmStop();   // v4.1: the meeting outlives this recorder
   micStart(recStream);                                            // v3.9.3: prove sound is arriving
   recStartKeepAlive();                                            // v3.8 (ported, CR-303)
   recStartWatchdog();                                             // v3.8 (ported, CR-303)
@@ -1508,6 +1820,114 @@ function stopRecording() {
   setTimeout(()=>{ try{ if(!(mediaRecorder&&mediaRecorder.state==='recording')) document.getElementById('recLabel').textContent='Tap to record your meeting'; }catch(_){}} , 4000);
 }
 function fmtTimer(ms){ const s=Math.floor(ms/1000); return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0'); }
+
+/* ══ v4.0: JOIN THE SEGMENTS BACK INTO ONE MEETING ═══════════════════════════
+   Separate MediaRecorder runs produce separate media containers, so the blobs
+   cannot simply be concatenated into one valid file. They are transcribed in
+   order instead and the TRANSCRIPTS joined, with each break marked in place so a
+   reader can see exactly where the recorder was restarted. One meeting record,
+   one analysis, gaps visible rather than silently smoothed over. */
+async function processSession(){
+  const segs=(sess&&sess.segments)||[];
+  if(!segs.length){ showStatus('Nothing was recorded in that meeting.','warn'); return; }
+  if(!getProxy()&&!getKey()){ showStatus('⚠ Set the Worker URL (Settings → Team Sync) or paste an AssemblyAI key. All '+segs.length+' segment(s) are safe on this device — end-of-meeting processing will retry.','warn'); return; }
+
+  processing=true;
+  try{
+  document.getElementById('resultsWrap').classList.add('hidden');
+  const s=lsj(SKEY)||{};
+  let allUtt=[], parts=[], failed=0;
+
+  for(let i=0;i<segs.length;i++){
+    const seg=segs[i];
+    setStep('upload'); setProgress(Math.round((i/segs.length)*70));
+    showStatus('<div class="spin"></div>&nbsp; Transcribing segment '+(i+1)+' of '+segs.length+'…','info');
+    let rec=null;
+    try{ rec=await IDB.get('audio', seg.key); }catch(e){}
+    if(!rec||!rec.blob||!rec.blob.size){ failed++; parts.push('[segment '+(i+1)+' could not be read from this device]'); continue; }
+    const file=new File([rec.blob], 'segment-'+(i+1)+'.m4a', {type:rec.type||'audio/mp4'});
+    try{
+      const url=await aaiUpload(file);
+      const job=await aaiSubmit(url);
+      const result=await aaiPoll(job,function(p){ setProgress(Math.round(((i+p)/segs.length)*70)); });
+      const map=buildSpeakerMap(result.utterances||[],s);
+      const utt=(result.utterances||[]).map(function(u){ return Object.assign({},u,{speakerName:map[u.speaker]||u.speaker, segment:i+1}); });
+      allUtt=allUtt.concat(utt);
+      parts.push(utt.map(function(u){ return '['+u.speakerName+']: '+u.text; }).join('\n'));
+      /* FIX (review H7): segments used to be stamped 'processed' here, before the
+         transcript was persisted anywhere. Killing the app mid-run then hid them
+         from the recovery banner forever with nothing written. Checkpoint first. */
+      try{ await persistDraft({id:sess.id,date:sess.date||today(),type:sess.type||'Ad Hoc',
+        title:(sess.title||'Meeting')+' (partial - '+(i+1)+' of '+segs.length+' segments)',
+        attendees:[...attendees],utterances:slimUtts(allUtt),rawTranscript:parts.join('\n'),
+        summary:'(analysis pending - segment checkpoint)',decisions:[],actions:[],properties:[],quotes:[],
+        createdAt:new Date().toISOString()}); }catch(e){}
+      try{ await markAudioProcessed(seg.key,{id:sess.id,title:sess.title}); }catch(e){}
+    }catch(e){
+      failed++;
+      parts.push('[segment '+(i+1)+' failed to transcribe: '+(e&&e.message?e.message:'unknown error')+' — the audio is still on this device, on the Recordings tab]');
+    }
+    if(i<segs.length-1) parts.push('\n— — — recording restarted here (segment '+(i+2)+') — — —\n');
+  }
+
+  const rawTranscript=parts.join('\n');
+  setStep('analyse'); setProgress(82);
+  showStatus('<div class="spin"></div>&nbsp; Analysing the joined meeting…','info');
+  let analysis;
+  /* FIX 2026-08-12 (independent review, C1): this called aaiLemur(), which does not
+     exist in this app - the analyser is analyzeTranscript(). The ReferenceError was
+     swallowed by the catch below, so every session meeting would have silently
+     produced no summary, no decisions and no actions while reporting success. That
+     is precisely the fault being fixed today, reintroduced in the fix for it.
+     The failure is now also SHOWN, not just swallowed. */
+  try{ analysis=await analyzeTranscript(rawTranscript,s); }
+  catch(e){
+    analysis=fallbackAnalysis();
+    showStatus('⚠ The transcript is saved, but the AI analysis failed: '+(e&&e.message?e.message:'unknown error')
+      +'<br>Decisions and actions were NOT extracted. Re-run it from Paste Transcript once this is fixed.','error');
+  }
+  setStep('done'); setProgress(100);
+
+  currentMeeting={
+    id:meetingIdForRun(),
+    date:sess.date||today(), type:sess.type||'Ad Hoc', title:sess.title||sess.type||'Meeting',
+    attendees:[...attendees], utterances:allUtt, rawTranscript,
+    summary:analysis.summary||'', decisions:analysis.decisions||[],
+    actions:(analysis.actions||[]).map(function(a){ return Object.assign({},a,{done:false}); }),
+    properties:analysis.properties||[], quotes:analysis.quotes||[],
+    createdAt:new Date().toISOString(),
+    sessionId:sess.id, segments:segs.length, autoResumes:sess.resumes||0,
+    sessionOpenMs:(sess.endedAt||Date.now())-sess.startedAt,
+    segmentsFailed:failed
+  };
+  await persistDraft(currentMeeting);
+  carryOverMeta(currentMeeting);
+  renderResults(currentMeeting);
+  document.getElementById('resultsWrap').classList.remove('hidden');
+  processing=false;
+
+  const capturedMs=segs.reduce(function(n,x){ return n+(x.ms||0); },0);
+  const openMs=currentMeeting.sessionOpenMs;
+  const missing=openMs-capturedMs;
+  let msg='✓ Meeting processed from '+segs.length+' segment'+(segs.length===1?'':'s')
+        + (sess.resumes?(' after '+sess.resumes+' automatic restart'+(sess.resumes===1?'':'s')):'')+'.';
+  if(failed) msg+=' <b>'+failed+' segment(s) failed to transcribe</b> — the audio is safe on the Recordings tab.';
+  /* Honesty check: the meeting was open for X, we captured Y. Say the difference
+     out loud rather than presenting a partial record as complete. */
+  if(missing>Math.max(60000, openMs*0.05)){
+    msg+='<br><b>⚠ The meeting was open for '+fmtTimer(openMs)+' but only '+fmtTimer(capturedMs)+' was captured.</b> '
+       + 'Roughly '+fmtTimer(missing)+' is not in this record. Write that part up from memory now, while it is fresh.';
+    showStatus(msg,'error');
+  } else {
+    showStatus(msg,'success');
+  }
+  saveMeeting(true);
+  }finally{
+    /* FIX (review H6): without this, any throw left processing=true permanently and
+       the record button refused every future meeting until a reload. */
+    processing=false;
+  }
+}
 
 async function handleRecordedFile(f, id, audit) {
   // SAFEGUARD v4: never accept an empty capture.
