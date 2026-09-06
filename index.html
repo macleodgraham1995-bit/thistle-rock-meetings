@@ -356,6 +356,21 @@ select option { background: var(--panel); }
 
   <div class="card">
     <div class="card-title">Meeting Details</div>
+    <!-- CLIENT ROUTING 2026-09-05: which business this meeting belongs to. No default on
+         purpose - it must be a decision, not an accident. Only Thistle Rock meetings are
+         ever eligible to reach the Thistle Rock Command Center. -->
+    <div class="field">
+      <label class="lbl">Client / Business <span style="color:#B02020;">*</span></label>
+      <select id="mClient" onchange="markEdited();refreshClientHint();">
+        <option value="">— choose one —</option>
+        <option>Thistle Rock</option>
+        <option>AMA</option>
+        <option>One Eye / Meridian</option>
+        <option>MDC</option>
+        <option>Other</option>
+      </select>
+      <div id="clientHint" style="margin-top:6px;font-size:12px;line-height:1.4;"></div>
+    </div>
     <div class="grid-2">
       <div class="field">
         <label class="lbl">Date</label>
@@ -673,9 +688,9 @@ const STORE='tr2_meetings', SKEY='tr2_settings', KKEY='tr2_aai_key', PKEY='tr2_p
    version it is not. Before this, the header said v3.5 while APP_VERSION said 3.3 and the
    local build was 3.6 — there was no reliable way to answer "what is actually running?".
    WHEN YOU CHANGE THE CODE: bump APP_VERSION and set BUILD_DATE. Nothing else. */
-const APP_VERSION='4.3.0';
-const BUILD_DATE='2026-08-25';
-const BUILD_NOTE='v4.3.0: FIXED the constant tone on the record button - the alarm element was played on loop with volume=0, which iOS ignores. Now unlocked silently with play-then-pause and controlled by play/pause only. v4.2.0: the alarm is SILENT by default - sound gated at source, toggle in Settings. Recording safeguards unchanged. v4.1.2: one off switch for the alarm - Dismiss, Stop and End Meeting all silence every source (tone, beep, speech, vibration). v4.1.1: false mic alarm on screen lock fixed; Dismiss now silences for good and pulses instead; guard no longer judges a backgrounded recorder. Plus: meeting session that outlives the recorder + dead-man switch; watchdog auto-resumes; alarm on an <audio> element so it can sound when backgrounded; real keep-alive buffer; mic level + silent-capture detection; offline; update check.';
+const APP_VERSION='4.6.0';
+const BUILD_DATE='2026-09-05';
+const BUILD_NOTE='v4.6.0 (2026-09-05): the Recordings tab now shows how full the device is and offers to clear, in one tap, only the audio that is over 14 days old, already transcribed, and whose meeting is in the shared team log. The app still never deletes audio on its own. v4.5.0 (2026-09-05): every meeting now names the client it belongs to - a required choice with no default, shown on every row of the log. Only Thistle Rock meetings are eligible for the Thistle Rock Command Center; anything else, or anything with no client set, stays in the shared log and is never sent. v4.4.0 (2026-09-05): FIXED - starting a new recording while a saved meeting was open wrote the new meeting OVER that saved meeting and stamped it with the old date; editingSavedId was never released on the record path. Added a safety net: a run carrying a materially different transcript now archives the record it would replace instead of destroying it. v4.3.0: FIXED the constant tone on the record button - the alarm element was played on loop with volume=0, which iOS ignores. Now unlocked silently with play-then-pause and controlled by play/pause only. v4.2.0: the alarm is SILENT by default - sound gated at source, toggle in Settings. Recording safeguards unchanged. v4.1.2: one off switch for the alarm - Dismiss, Stop and End Meeting all silence every source (tone, beep, speech, vibration). v4.1.1: false mic alarm on screen lock fixed; Dismiss now silences for good and pulses instead; guard no longer judges a backgrounded recorder. Plus: meeting session that outlives the recorder + dead-man switch; watchdog auto-resumes; alarm on an <audio> element so it can sound when backgrounded; real keep-alive buffer; mic level + silent-capture detection; offline; update check.';
 // ── PER-APP BRANDING — the ONLY place a company name is hardcoded ──
 const APP_BRAND='Thistle Rock';       // header + report footer
 const APP_COMPANY='Thistle Rock Properties Ltd.';   // report masthead fallback
@@ -705,6 +720,25 @@ function carryOverMeta(m){
   const id=m.id;
   const prev=getMeetings().find(function(x){ return x&&x.id===id; });
   if(prev){
+    /* SAFETY NET 2026-09-05: a run must never silently replace a DIFFERENT conversation.
+       If the stored record holds a materially different transcript, keep a copy of it under
+       its own id before this run lands, and do NOT let the new content inherit its date. */
+    var prevTx = prev.rawTranscript || '';
+    var newTx  = m.rawTranscript || '';
+    var differentConversation = !!(prevTx && newTx && prevTx !== newTx &&
+        Math.abs(prevTx.length - newTx.length) > Math.max(500, prevTx.length * 0.10));
+    if(differentConversation){
+      try{
+        var keep = JSON.parse(JSON.stringify(prev));
+        keep.id = 'arch_' + id + '_' + Date.now();
+        keep.archivedFrom = id;
+        keep.archivedAt = new Date().toISOString();
+        keep.title = '[kept ' + new Date().toISOString().slice(0,10) + '] ' + (prev.title || prev.type || 'Meeting');
+        var allPrev = getMeetings(); allPrev.unshift(keep); setMeetings(allPrev);
+      }catch(e){}
+      m.supersededPrevious = id;
+      return m;   // new date, new content - inherits nothing from the record it displaced
+    }
     m.createdAt = prev.createdAt || m.createdAt;      // keep when the meeting actually happened
     m.reprocessedAt = new Date().toISOString();
     if(prev.actions&&prev.actions.length&&m.actions){
@@ -717,6 +751,16 @@ function carryOverMeta(m){
 }
 function clearReprocessTarget(){ reprocessTargetId=null; }
 
+/* CLIENT ROUTING 2026-09-05: say out loud where this meeting's actions will end up. */
+const TRP_CLIENT='Thistle Rock';
+function refreshClientHint(){
+  const el=document.getElementById('clientHint'), sel=document.getElementById('mClient');
+  if(!el||!sel) return;
+  const v=sel.value;
+  if(!v){ el.innerHTML='<span style="color:#B02020;font-weight:600;">Choose a client before you record.</span> Nothing is sent anywhere until you do.'; return; }
+  if(v===TRP_CLIENT){ el.innerHTML='<span style="color:#1E6B34;font-weight:600;">Actions from this meeting go to the Thistle Rock Command Center</span> for you to triage.'; return; }
+  el.innerHTML='<span style="color:#595959;">'+v+' meeting - saved to the shared log only. Nothing from it goes to the Thistle Rock Command Center.</span>';
+}
 function markEdited(){ if(!editingSavedId) return; hasUnsavedEdits=true; const b=document.getElementById('editBanner'); if(b){ b.classList.remove('hidden'); b.querySelector('.eb-state').textContent='Unsaved changes'; b.classList.add('eb-dirty'); } }
 function showEditBanner(m){ const b=document.getElementById('editBanner'); if(!b) return; hasUnsavedEdits=false; b.classList.remove('hidden','eb-dirty'); b.querySelector('.eb-what').textContent=(m.title||m.type||'meeting'); b.querySelector('.eb-state').textContent='Editing saved meeting'; }
 function hideEditBanner(){ editingSavedId=null; hasUnsavedEdits=false; const b=document.getElementById('editBanner'); if(b) b.classList.add('hidden'); }
@@ -793,6 +837,71 @@ async function clearSafety(key){
     }catch(e){}
   }
 }
+/* ══ STORAGE PRESSURE 2026-09-05 ═════════════════════════════════════════════
+   Nothing here weakens the rule above: the app still never deletes audio on its
+   own. What was missing was a way to SEE the problem and act on it in one tap
+   instead of thirty. Graham's phone reported storage full and fell back to
+   caching 30 meetings; the cause was audio, which accumulates for ever because
+   deleting it was deliberately left to a person and a person has better things
+   to do than tap Delete thirty times.
+
+   A recording qualifies as safe to clear only when ALL of these hold:
+     - it is a finished recording, not an interrupted 'live_' capture
+     - it has been transcribed and stamped processed
+     - its meeting exists in the log WITH transcript text
+     - it is more than 14 days old
+   Anything failing any test is left alone and is not offered. ══════════════════ */
+const AUDIO_KEEP_DAYS = 14;
+function isSafeToClear(key, val){
+  try{
+    if(String(key).indexOf('live_')===0) return false;      // an interrupted capture is never spare
+    if(!val || !val.processed) return false;                // never transcribed - the audio is all there is
+    if(!val.meetingId) return false;                        // cannot prove where it went
+    const m=getMeetings().find(x=>x&&String(x.id)===String(val.meetingId));
+    if(!m || !(m.rawTranscript||'').length) return false;   // no transcript kept = the audio is still the record
+    const t=Date.parse(val.when||'');
+    if(!t) return false;   // no timestamp is not the same as old - leave it alone
+    return ((Date.now()-t)/86400000) > AUDIO_KEEP_DAYS;
+  }catch(e){ return false; }
+}
+async function storagePressure(){
+  try{
+    if(!navigator.storage || !navigator.storage.estimate) return null;
+    const e=await navigator.storage.estimate();
+    if(!e || !e.quota) return null;
+    return { pct:Math.round((e.usage/e.quota)*100), usedMB:Math.round(e.usage/1048576), quotaMB:Math.round(e.quota/1048576) };
+  }catch(e){ return null; }
+}
+/* Warn BEFORE the device is full, not after it has started dropping meetings. */
+async function checkStoragePressure(){
+  try{
+    const q=await storagePressure();
+    if(!q || q.pct < 80) return;
+    let list=[]; try{ list=await IDB.entries('audio'); }catch(e){}
+    const safe=(list||[]).filter(x=>x.val&&x.val.blob&&x.val.blob.size&&isSafeToClear(x.key,x.val));
+    const mb=safe.reduce((n,x)=>n+x.val.blob.size,0)/1024/1024;
+    storageWarn('This device is '+q.pct+'% full ('+q.usedMB+' MB of '+q.quotaMB+' MB). '
+      + (safe.length
+          ? ('Open the Recordings tab - '+mb.toFixed(1)+' MB of old, already-transcribed audio can be cleared in one tap.')
+          : 'Open the Recordings tab and review what is held. Nothing is old enough to clear automatically yet.'));
+  }catch(e){}
+}
+async function clearSafeRecordings(){
+  let list=[]; try{ list=await IDB.entries('audio'); }catch(e){ return; }
+  const safe=(list||[]).filter(x=>x.val&&x.val.blob&&x.val.blob.size&&isSafeToClear(x.key,x.val));
+  if(!safe.length){ showStatus('Nothing is safe to clear yet.','info'); return; }
+  const mb=(safe.reduce((n,x)=>n+x.val.blob.size,0)/1024/1024).toFixed(1);
+  const names=safe.slice(0,8).map(x=>'  \u2022 '+(x.val.meetingTitle||'Recording')+'  ('+(x.val.blob.size/1048576).toFixed(1)+' MB)').join('\n');
+  if(!confirm('Delete '+safe.length+' recording'+(safe.length===1?'':'s')+' permanently? That frees '+mb+' MB.\n\n'
+      +names+(safe.length>8?('\n  ... and '+(safe.length-8)+' more'):'')
+      +'\n\nEvery one is over '+AUDIO_KEEP_DAYS+' days old, transcribed, and its meeting is in the shared team log.\nThe notes and transcripts are kept either way. The audio cannot be recovered.')) return;
+  let n=0;
+  for(const x of safe){ try{ await IDB.del('audio', x.key); n++; }catch(e){} }
+  try{ lss(RCOUNT, String(Math.max(0,(parseInt(ls(RCOUNT)||'0',10)||0)-n))); }catch(e){}
+  showStatus('\u2713 Cleared '+n+' recording'+(n===1?'':'s')+' and freed '+mb+' MB. Notes and transcripts are untouched.','success');
+  renderRecordings();
+}
+
 /* the only route by which audio leaves the device: a person choosing it */
 async function deleteRecordingForever(key){
   const a=(window.__recAudioMap||{})[key];
@@ -828,9 +937,24 @@ async function renderRecordings(){
   keep.forEach(x=>{ window.__recAudioMap[x.key]=x.val; });
   const bytes=keep.reduce((n,x)=>n+x.val.blob.size,0);
   const st=document.getElementById('recStorage');
-  if(st) st.textContent=keep.length
-    ? (keep.length+' recording'+(keep.length===1?'':'s')+' held on this device, '+(bytes/1024/1024).toFixed(1)+' MB in total.')
-    : '';
+  if(st){
+    if(!keep.length){ st.innerHTML=''; }
+    else{
+      const safe=keep.filter(x=>isSafeToClear(x.key,x.val));
+      const safeMB=safe.reduce((n,x)=>n+x.val.blob.size,0)/1024/1024;
+      let line=keep.length+' recording'+(keep.length===1?'':'s')+' held on this device, '+(bytes/1024/1024).toFixed(1)+' MB in total.';
+      const q=await storagePressure();
+      if(q) line+=' This device is '+q.pct+'% full ('+q.usedMB+' MB of '+q.quotaMB+' MB).';
+      st.innerHTML=ccEscHtml(line)
+        + (safe.length
+            ? '<div style="margin-top:8px;">'
+              + '<button class="btn btn-sm" onclick="clearSafeRecordings()">Free up '+safeMB.toFixed(1)+' MB</button>'
+              + '<div style="margin-top:6px;font-size:12px;color:#595959;line-height:1.4;">'
+              + safe.length+' recording'+(safe.length===1?' is':'s are')+' over 14 days old, already transcribed, and the meeting is in the shared team log. '
+              + 'Everything else stays. You choose - the app never deletes audio on its own.</div></div>'
+            : '<div style="margin-top:6px;font-size:12px;color:#595959;line-height:1.4;">Nothing is safe to clear automatically yet. A recording only qualifies once it is over 14 days old, transcribed, and its meeting is in the shared team log.</div>');
+    }
+  }
   if(!keep.length){ el.innerHTML='<div class="empty-state"><div class="ei">🎙</div><p>No recordings on this device yet.</p></div>'; return; }
   keep.sort((a,b)=>String(b.val.when||'').localeCompare(String(a.val.when||'')));
   el.innerHTML=keep.map(({key,val})=>{
@@ -878,6 +1002,7 @@ async function ensureStoragePersistence(){
    that is eviction, and it is said out loud rather than rendered as an empty state. */
 const RCOUNT='tr2_reccount';
 async function auditRecordingCount(){
+  try{ checkStoragePressure(); }catch(e){}
   try{
     const list=await IDB.entries('audio');
     const have=(list||[]).filter(x=>x.val&&x.val.blob&&x.val.blob.size).length;
@@ -1995,7 +2120,11 @@ async function toggleRecord() {
   catch(e) { mediaRecorder = new MediaRecorder(recStream); }
   recActiveId = Date.now(); liveLastSave = 0;
   wireRecorder();
-  clearReprocessTarget();   // DUPLICATE FIX: a new recording is a NEW meeting
+  clearReprocessTarget(); hideEditBanner();   // OVERWRITE FIX 2026-09-05: a new recording is a NEW meeting.
+  // clearReprocessTarget() only released reprocessTargetId; editingSavedId survived, so
+  // meetingIdForRun() handed this recording the id of whatever meeting was open and
+  // saveMeeting() replaced it. On 3 Sep that destroyed the 28 Aug Parkland Meeting.
+  // Both id locks must be released here.
   mediaRecorder.start(1000); // collect data every second so a crash loses almost nothing
   recStart = Date.now();
   recTruncated = false;
@@ -2588,6 +2717,8 @@ function syncFormToMeeting(){
   const d=document.getElementById('mDate').value;
   const t=document.getElementById('mType').value;
   const ti=document.getElementById('mTitle').value;
+  const cl=document.getElementById('mClient');
+  currentMeeting.client = cl ? (cl.value||'') : (currentMeeting.client||'');
   if(d)  currentMeeting.date=d;
   if(t)  currentMeeting.type=t;
   currentMeeting.title = ti || t || currentMeeting.title;
@@ -2609,6 +2740,12 @@ function stampCaptureAudit(m){
 async function saveMeeting(auto){
   if(!currentMeeting) return;
   syncFormToMeeting();
+  /* CLIENT ROUTING 2026-09-05: fail closed. A meeting with no client is still saved in
+     full - never block a save - but it is not eligible for the Command Center and the
+     person who recorded it is the only one who can say which business it belongs to. */
+  if(!currentMeeting.client){
+    showStatus('⚠ <b>No client set for this meeting.</b> It is saved, but it will not reach the Thistle Rock Command Center until you choose a client at the top of the form.','warn');
+  }
   stampCaptureAudit(currentMeeting);              // v3.8 (ported, CR-303)
   try{ await markAudioProcessed(curAudioKey, currentMeeting); }catch(e){}   // v3.8 (ported, CR-302)
   const all=getMeetings(),idx=all.findIndex(m=>m.id===currentMeeting.id);
@@ -2848,10 +2985,11 @@ function renderLog(){
   if(!all.length){el.innerHTML=`<div class="empty-state"><div class="ei">📁</div><p>No meetings saved yet.</p></div>`;return;}
   el.innerHTML=all.map(m=>{
     const open=(m.actions||[]).filter(a=>!a.done).length;
-    return `<div class="meeting-card" onclick="loadMeeting('${m.id}')"><div class="mc-head"><div class="mc-title">${m.title||m.type}</div><div style="display:flex;gap:8px;align-items:center;flex-shrink:0;"><span class="mc-date">${fmtDate(m.date)}</span><button class="btn btn-ghost btn-xs" title="Executive report" onclick="event.stopPropagation();openReport('${m.id}')">📄</button><button class="btn btn-ghost btn-xs" title="Export this meeting" onclick="event.stopPropagation();exportMeetingMenu('${m.id}')">⬇</button><button class="btn btn-ghost btn-xs" title="Delete this meeting" onclick="event.stopPropagation();deleteMeeting('${m.id}')">🗑</button></div></div><div class="mc-summary">${(m.summary||'').substring(0,150)}…</div><div class="mc-tags"><span class="tag">${m.type}</span><span class="tag">${(m.attendees||[]).join(' · ')}</span>${open?`<span class="tag tag-open">${open} open action${open>1?'s':''}</span>`:''}</div></div>`;
+    return `<div class="meeting-card" onclick="loadMeeting('${m.id}')"><div class="mc-head"><div class="mc-title">${m.title||m.type}</div><div style="display:flex;gap:8px;align-items:center;flex-shrink:0;"><span class="mc-date">${fmtDate(m.date)}</span><button class="btn btn-ghost btn-xs" title="Executive report" onclick="event.stopPropagation();openReport('${m.id}')">📄</button><button class="btn btn-ghost btn-xs" title="Export this meeting" onclick="event.stopPropagation();exportMeetingMenu('${m.id}')">⬇</button><button class="btn btn-ghost btn-xs" title="Delete this meeting" onclick="event.stopPropagation();deleteMeeting('${m.id}')">🗑</button></div></div><div class="mc-summary">${(m.summary||'').substring(0,150)}…</div><div class="mc-tags">${m.client?`<span class="tag" style="background:#1F3A5F;color:#fff;">${m.client}</span>`:`<span class="tag" style="background:#FDECEC;color:#B02020;font-weight:700;">no client</span>`}<span class="tag">${m.type}</span><span class="tag">${(m.attendees||[]).join(' · ')}</span>${open?`<span class="tag tag-open">${open} open action${open>1?'s':''}</span>`:''}</div></div>`;
   }).join('');
 }
 function loadMeeting(id){ const m=getMeetings().find(x=>x.id===id);if(!m)return;currentMeeting=m;lastSavedId=m.id;document.getElementById('mDate').value=m.date;document.getElementById('mType').value=m.type;document.getElementById('mTitle').value=m.title||'';
+  const clEl=document.getElementById('mClient'); if(clEl){ clEl.value=m.client||''; } refreshClientHint();
   // EDIT FIX: restore THIS meeting's attendees into the chips (previously the chips
   // kept showing the global default list, so edits went to Settings not the meeting)
   if(Array.isArray(m.attendees)&&m.attendees.length){ attendees=[...m.attendees]; renderChips(); }
@@ -3011,6 +3149,7 @@ function dlJson(d,n){ const a=document.createElement('a');a.href=URL.createObjec
 function resetAll(){
   if(isDirty()&&!confirm('The current meeting has not finished saving. Start a new one anyway?')) return;
   currentMeeting=null;selectedFile=null;hideEditBanner();clearReprocessTarget();
+  const clR=document.getElementById('mClient'); if(clR){ clR.value=''; } refreshClientHint();
   document.getElementById('nativeAudioInput').value='';
   document.getElementById('audioInput').value='';
   document.getElementById('filePillWrap').classList.add('hidden');
